@@ -257,16 +257,20 @@ function App() {
   const continueTaggingSession = () => {
     if (!inlineTagEdit) return
     
-    // Clear query and find first unselected tag
+    // Clear query and auto-advance to first unselected tag
     const note = notes.find(n => n.id === inlineTagEdit.noteId)
     if (!note) return
     
-    const unselectedTags = tags.filter(tag => !note.tagIds.includes(tag.id))
+    // Find first unselected tag to highlight
+    const allTags = getFilteredTagOptions('')
+    const firstUnselectedIndex = allTags.findIndex(tag => 
+      !tag.isNew && !note.tagIds.includes(tag.id)
+    )
     
     setInlineTagEdit({
       ...inlineTagEdit,
       query: '',
-      highlightedIndex: 0
+      highlightedIndex: Math.max(0, firstUnselectedIndex)
     })
   }
 
@@ -332,6 +336,9 @@ function App() {
         } else if (e.key === 'ArrowDown') {
           e.preventDefault()
           navigateInlineTagEdit('down')
+        } else if (e.key === 'Tab') {
+          e.preventDefault()
+          navigateInlineTagEdit('down') // Tab advances to next item
         }
       }
     }
@@ -458,7 +465,7 @@ function App() {
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      ↑↓ navigate • Space to toggle • Enter to select/create • Escape to finish
+                      Tab/↑↓ navigate • Space to toggle • Enter to select/create • Escape to finish
                     </div>
                   </div>
                 ) : index === 0 || editingTags === note.id ? (
