@@ -24,11 +24,10 @@ function App() {
   const [creatingTagForNote, setCreatingTagForNote] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes')
   const [saving, setSaving] = useState<string | null>(null)
-  const [tagPicker, setTagPicker] = useState<{
-    isOpen: boolean
+  const [inlineTagEdit, setInlineTagEdit] = useState<{
     noteId: string
     query: string
-    selectedIndex: number
+    highlightedIndex: number
   } | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
 
@@ -176,34 +175,35 @@ function App() {
     }
   }
 
-  const openTagPicker = (noteId: string) => {
-    setTagPicker({
-      isOpen: true,
+  const startInlineTagEdit = (noteId: string) => {
+    setInlineTagEdit({
       noteId,
       query: '',
-      selectedIndex: 0
+      highlightedIndex: 0
     })
   }
 
-  const closeTagPicker = () => {
-    setTagPicker(null)
+  const exitInlineTagEdit = () => {
+    setInlineTagEdit(null)
   }
 
-  const updateTagPickerQuery = (query: string) => {
-    if (tagPicker) {
-      setTagPicker({
-        ...tagPicker,
+  const updateInlineTagQuery = (query: string) => {
+    if (inlineTagEdit) {
+      const filteredOptions = getFilteredTagOptions(query)
+      setInlineTagEdit({
+        ...inlineTagEdit,
         query,
-        selectedIndex: 0 // Reset selection when query changes
+        highlightedIndex: Math.min(inlineTagEdit.highlightedIndex, Math.max(0, filteredOptions.length - 1))
       })
     }
   }
 
-  const navigateTagPicker = (direction: 'up' | 'down') => {
-    if (!tagPicker) return
+  const navigateInlineTagEdit = (direction: 'up' | 'down') => {
+    if (!inlineTagEdit) return
     
-    const maxIndex = Math.max(filteredTagOptions.length - 1, 0)
-    let newIndex = tagPicker.selectedIndex
+    const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
+    const maxIndex = Math.max(filteredOptions.length - 1, 0)
+    let newIndex = inlineTagEdit.highlightedIndex
     
     if (direction === 'up') {
       newIndex = newIndex > 0 ? newIndex - 1 : maxIndex
@@ -211,42 +211,55 @@ function App() {
       newIndex = newIndex < maxIndex ? newIndex + 1 : 0
     }
     
-    setTagPicker({
-      ...tagPicker,
-      selectedIndex: newIndex
+    setInlineTagEdit({
+      ...inlineTagEdit,
+      highlightedIndex: newIndex
     })
   }
 
-  const selectTagFromPicker = (tagId?: string, tagName?: string) => {
-    if (!tagPicker) return
+  const toggleHighlightedTag = () => {
+    if (!inlineTagEdit) return
     
-    let selectedTag
-    if (tagId && tagName) {
-      selectedTag = { id: tagId, name: tagName }
-    } else {
-      selectedTag = filteredTagOptions[tagPicker.selectedIndex]
-      if (!selectedTag) return
+    const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
+    const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
+    
+    if (highlightedOption) {
+      if (highlightedOption.isNew) {
+        // Create new tag
+        const newTag: Tag = {
+          id: Date.now().toString(),
+          name: highlightedOption.name
+        }
+        setTags(prevTags => [...prevTags, newTag])
+        toggleTag(inlineTagEdit.noteId, newTag.id)
+        // Clear query after creating
+        setInlineTagEdit({
+          ...inlineTagEdit,
+          query: '',
+          highlightedIndex: 0
+        })
+      } else {
+        // Toggle existing tag
+        toggleTag(inlineTagEdit.noteId, highlightedOption.id)
+      }
     }
-    
-    // Toggle tag on note
-    toggleTag(tagPicker.noteId, selectedTag.id)
-    closeTagPicker()
   }
 
-  const filteredTagOptions = tagPicker 
-    ? [
-        // Existing tags
-        ...tags.filter(tag => 
-          tag.name.toLowerCase().includes(tagPicker.query.toLowerCase())
-        ).map(tag => ({ ...tag, isNew: false })),
-        // Option to create new tag if query doesn't match existing
-        ...(tagPicker.query.trim() && 
-           !tags.some(tag => tag.name.toLowerCase() === tagPicker.query.toLowerCase())
-          ? [{ id: 'new', name: tagPicker.query.trim(), isNew: true }]
-          : []
-        )
-      ]
-    : []
+  const getFilteredTagOptions = (query: string) => {
+    const filtered = [
+      // Existing tags that match the query
+      ...tags.filter(tag => 
+        tag.name.toLowerCase().includes(query.toLowerCase())
+      ).map(tag => ({ ...tag, isNew: false })),
+      // Option to create new tag if query doesn't match existing
+      ...(query.trim() && 
+         !tags.some(tag => tag.name.toLowerCase() === query.toLowerCase())
+        ? [{ id: 'new', name: query.trim(), isNew: true }]
+        : []
+      )
+    ]
+    return filtered
+  }
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -257,47 +270,37 @@ function App() {
         createNewNote()
       }
       
-      // Tag picker shortcut (Cmd+I)
+      // Inline tag edit shortcut (Cmd+I)
       if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
         e.preventDefault()
-        if (activeNoteId && !tagPicker?.isOpen) {
-          openTagPicker(activeNoteId)
+        if (activeNoteId && !inlineTagEdit) {
+          startInlineTagEdit(activeNoteId)
         }
       }
       
-      // Handle tag picker keyboard navigation
-      if (tagPicker?.isOpen) {
+      // Handle inline tag edit navigation
+      if (inlineTagEdit) {
         if (e.key === 'Escape') {
           e.preventDefault()
-          closeTagPicker()
+          exitInlineTagEdit()
         } else if (e.key === 'Enter') {
           e.preventDefault()
-          const selectedOption = filteredTagOptions[tagPicker.selectedIndex]
-          if (selectedOption) {
-            if (selectedOption.isNew) {
-              // Create new tag
-              const newTag: Tag = {
-                id: Date.now().toString(),
-                name: selectedOption.name
-              }
-              setTags(prevTags => [...prevTags, newTag])
-              selectTagFromPicker(newTag.id, newTag.name)
-            } else {
-              selectTagFromPicker(selectedOption.id, selectedOption.name)
-            }
-          }
+          exitInlineTagEdit()
+        } else if (e.key === ' ') {
+          e.preventDefault()
+          toggleHighlightedTag()
         } else if (e.key === 'ArrowUp') {
           e.preventDefault()
-          navigateTagPicker('up')
+          navigateInlineTagEdit('up')
         } else if (e.key === 'ArrowDown') {
           e.preventDefault()
-          navigateTagPicker('down')
+          navigateInlineTagEdit('down')
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [tagPicker, filteredTagOptions, activeNoteId])
+  }, [inlineTagEdit, activeNoteId])
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
@@ -377,7 +380,48 @@ function App() {
               </div>
               {/* Tags section */}
               <div className="flex flex-wrap gap-2 mb-3 pr-24 md:pr-32">
-                {index === 0 || editingTags === note.id ? (
+                {inlineTagEdit?.noteId === note.id ? (
+                  // Inline tag editing mode
+                  <div className="w-full">
+                    <input
+                      type="text"
+                      value={inlineTagEdit.query}
+                      onChange={(e) => updateInlineTagQuery(e.target.value)}
+                      placeholder="Type to search tags..."
+                      className="w-full px-3 py-2 border-2 border-blue-400 rounded-md outline-none text-sm"
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    {/* Show filtered tags */}
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {getFilteredTagOptions(inlineTagEdit.query).map((option, index) => (
+                        <div
+                          key={option.id}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                            index === inlineTagEdit.highlightedIndex
+                              ? 'bg-blue-500 text-white ring-2 ring-blue-300'
+                              : option.isNew
+                              ? 'bg-green-100 text-green-700'
+                              : note.tagIds.includes(option.id)
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-gray-200 text-gray-700'
+                          }`}
+                        >
+                          {option.isNew ? `+ Create "${option.name}"` : option.name}
+                          {!option.isNew && note.tagIds.includes(option.id) && ' ✓'}
+                        </div>
+                      ))}
+                      {getFilteredTagOptions(inlineTagEdit.query).length === 0 && inlineTagEdit.query && (
+                        <div className="px-3 py-1 text-sm text-gray-500">
+                          No matching tags
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      ↑↓ navigate • Space to toggle • Enter to finish
+                    </div>
+                  </div>
+                ) : index === 0 || editingTags === note.id ? (
                   // Show all tags for first note or when editing
                   <>
                     {tags.map(tag => (
@@ -549,80 +593,6 @@ function App() {
           </button>
         </div>
       </div>
-      
-      {/* Tag Picker Modal */}
-      {tagPicker?.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-96 max-h-96 flex flex-col">
-            {/* Header */}
-            <div className="p-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">Add Tags</h3>
-              <p className="text-sm text-gray-500 mt-1">Press ⌘I to open, ↑↓ to navigate, Enter to select</p>
-            </div>
-            
-            {/* Search Input */}
-            <div className="p-4 border-b border-gray-200">
-              <input
-                type="text"
-                value={tagPicker.query}
-                onChange={(e) => updateTagPickerQuery(e.target.value)}
-                placeholder="Search or create tags..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md outline-none focus:border-blue-400"
-                autoFocus
-              />
-            </div>
-            
-            {/* Tag List */}
-            <div className="flex-1 overflow-y-auto">
-              {filteredTagOptions.length > 0 ? (
-                filteredTagOptions.map((option, index) => (
-                  <button
-                    key={option.id}
-                    onClick={() => {
-                      if (option.isNew) {
-                        const newTag: Tag = {
-                          id: Date.now().toString(),
-                          name: option.name
-                        }
-                        setTags(prevTags => [...prevTags, newTag])
-                        selectTagFromPicker(newTag.id, newTag.name)
-                      } else {
-                        selectTagFromPicker(option.id, option.name)
-                      }
-                    }}
-                    className={`w-full text-left px-4 py-3 flex items-center gap-3 border-b border-gray-100 last:border-b-0 ${
-                      index === tagPicker.selectedIndex
-                        ? 'bg-blue-50 border-blue-200'
-                        : 'hover:bg-gray-50'
-                    }`}
-                  >
-                    {option.isNew ? (
-                      <>
-                        <span className="text-green-600 font-bold">+</span>
-                        <span className="text-green-600">Create "{option.name}"</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs">
-                          #
-                        </span>
-                        <span className="text-gray-800">{option.name}</span>
-                        {notes.find(n => n.id === tagPicker.noteId)?.tagIds.includes(option.id) && (
-                          <span className="ml-auto text-blue-600 text-sm">✓</span>
-                        )}
-                      </>
-                    )}
-                  </button>
-                ))
-              ) : (
-                <div className="p-4 text-center text-gray-500">
-                  {tagPicker.query ? 'No tags found' : 'Start typing to search tags'}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
