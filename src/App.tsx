@@ -39,6 +39,10 @@ function App() {
   const modKey = isMac ? '⌘' : 'Ctrl'
   const modKeyName = isMac ? 'Cmd' : 'Ctrl'
 
+  // UX: Check if current note has content - prevents creating empty notes
+  const currentNote = notes.find(note => note.id === activeNoteId)
+  const canCreateNewNote = currentNote && (currentNote.content.trim() || currentNote.tagIds.length > 0)
+
   // Initialize with an empty note and some sample tags
   useEffect(() => {
     const initialNote: Note = {
@@ -423,8 +427,8 @@ function App() {
       }
       
       // UX: Cmd+Enter creates new note (save and create new pattern)
-      // Always handle this globally - exit tag editing first if active, then create new note
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      // Only allow if current note has content or tags to prevent empty notes
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && canCreateNewNote) {
         e.preventDefault()
         // UX: Exit tag editing mode first if active, then create new note
         if (inlineTagEdit) {
@@ -528,11 +532,19 @@ function App() {
         <div className="hidden md:flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Notes</h1>
           <button
-            onClick={createNewNote}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            onClick={canCreateNewNote ? createNewNote : undefined}
+            disabled={!canCreateNewNote}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+              canCreateNewNote
+                ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
+            title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}
           >
             <span className="text-lg">+</span>
-            <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">{modKey}↵</kbd>
+            <kbd className={`px-1.5 py-0.5 rounded text-xs ${
+              canCreateNewNote ? 'bg-blue-400' : 'bg-gray-400'
+            }`}>{modKey}↵</kbd>
           </button>
         </div>
         
@@ -796,9 +808,14 @@ function App() {
       
       {/* Mobile FAB for new note */}
       <button
-        onClick={createNewNote}
-        className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-blue-600 transition-colors z-10"
-        title={`New Note (${modKey}↵)`}
+        onClick={canCreateNewNote ? createNewNote : undefined}
+        disabled={!canCreateNewNote}
+        className={`md:hidden fixed bottom-20 right-4 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl transition-colors z-10 ${
+          canCreateNewNote
+            ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'
+            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+        }`}
+        title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}
       >
         +
       </button>
