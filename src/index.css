@@ -1,1 +1,40 @@
 @import "tailwindcss";
+
+/* Note creation animations */
+@keyframes expandIn {
+  0% {
+    max-height: 0;
+    opacity: 0;
+    transform: translateY(-20px);
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    max-height: 500px;
+    opacity: 1;
+    transform: translateY(0);
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+}
+
+@keyframes slideDown {
+  0% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-expandIn {
+  animation: expandIn 400ms ease-out forwards;
+  overflow: hidden;
+}
+
+.animate-slideDown {
+  animation: slideDown 300ms ease-out forwards;
+}

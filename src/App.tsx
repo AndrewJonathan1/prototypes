@@ -8,6 +8,7 @@ interface Note {
   updatedAt: Date
   isBookmarked: boolean
   isCompleted: boolean
+  isNew?: boolean
 }
 
 interface Tag {
@@ -30,6 +31,7 @@ function App() {
     highlightedIndex: number
   } | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Initialize with an empty note and some sample tags
   useEffect(() => {
@@ -85,7 +87,7 @@ function App() {
   }, [notes])
 
   const updateNote = (noteId: string, content: string) => {
-    setSaving(noteId)
+    // UX: Update note content immediately without showing save indicator on every keystroke
     setNotes(prevNotes => 
       prevNotes.map(note => 
         note.id === noteId 
@@ -93,8 +95,19 @@ function App() {
           : note
       )
     )
-    // Clear saving indicator after a short delay
-    setTimeout(() => setSaving(null), 500)
+    
+    // UX: Only show save indicator after user stops typing (debounced)
+    // Clear any existing timeout first
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    
+    // Show saving indicator after 500ms of no typing
+    saveTimeoutRef.current = setTimeout(() => {
+      setSaving(noteId)
+      // Hide indicator after brief moment to show "saved" feedback
+      setTimeout(() => setSaving(null), 300)
+    }, 500)
   }
 
   const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
@@ -110,10 +123,26 @@ function App() {
       createdAt: new Date(),
       updatedAt: new Date(),
       isBookmarked: false,
-      isCompleted: false
+      isCompleted: false,
+      isNew: true // UX: Flag for expand-in animation when note is created
     }
+    
+    // UX: Clear any active tag editing state when creating new note to avoid confusion
+    // User should focus on the new note, not continue editing tags on old note
+    setInlineTagEdit(null)
+    
     setNotes(prevNotes => [newNote, ...prevNotes])
     setActiveNoteId(newNote.id)
+    
+    // UX: Remove animation flag after animation completes so note behaves normally
+    // The isNew flag triggers expand-in animation, then gets removed for normal behavior
+    setTimeout(() => {
+      setNotes(prevNotes => 
+        prevNotes.map(note => 
+          note.id === newNote.id ? { ...note, isNew: false } : note
+        )
+      )
+    }, 400) // Match animation duration in CSS
   }
 
   const formatDate = (date: Date) => {
@@ -193,15 +222,24 @@ function App() {
   }
 
   const startInlineTagEdit = (noteId: string) => {
+    // UX: Start inline tag editing with fuzzy search and keyboard navigation
+    // This provides a lightweight alternative to showing all tags at once
     setInlineTagEdit({
       noteId,
       query: '',
-      highlightedIndex: 0
+      highlightedIndex: 0 // UX: Start with first option highlighted for keyboard navigation
     })
   }
 
   const exitInlineTagEdit = () => {
     setInlineTagEdit(null)
+    // UX: Return focus to note content after tag editing for seamless writing flow
+    // User expects to continue typing in the note after finishing tag selection
+    setTimeout(() => {
+      if (activeNoteRef.current) {
+        activeNoteRef.current.focus()
+      }
+    }, 0)
   }
 
   const updateInlineTagQuery = (query: string) => {
@@ -242,21 +280,22 @@ function App() {
     
     if (highlightedOption) {
       if (highlightedOption.isNew) {
-        // For new tags, just confirm creation - don't actually create yet
-        // This could show a confirmation or just do nothing
+        // UX: Don't create new tags with space/enter in toggle mode
+        // User must explicitly confirm new tag creation to prevent accidents
         return
       } else {
-        // Toggle existing tag and optionally continue tagging session
+        // UX: Toggle existing tag and optionally continue tagging session
         toggleTag(inlineTagEdit.noteId, highlightedOption.id)
         
-        // Only auto-advance if user typed a search and there's exactly one result
+        // UX: Smart auto-advance logic - only advance when user clearly intended one result
+        // If user typed a search and there's exactly one result, they probably want to continue
         const shouldAutoAdvance = inlineTagEdit.query.trim() && 
           getFilteredTagOptions(inlineTagEdit.query).length === 1
         
         if (shouldAutoAdvance) {
           continueTaggingSession()
         } else {
-          // Just clear the query but stay on current position
+          // UX: Clear search but stay in tag mode for easy multi-tag selection
           setInlineTagEdit({
             ...inlineTagEdit,
             query: ''
@@ -273,7 +312,7 @@ function App() {
     const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
     
     if (highlightedOption?.isNew) {
-      // Create new tag
+      // UX: Create new tag and immediately apply it to current note
       const newTag: Tag = {
         id: Date.now().toString(),
         name: highlightedOption.name
@@ -281,7 +320,8 @@ function App() {
       setTags(prevTags => [...prevTags, newTag])
       toggleTag(inlineTagEdit.noteId, newTag.id)
       
-      // For new tag creation, always auto-advance since user explicitly created something
+      // UX: Always auto-advance after creating new tag since user explicitly created something
+      // This keeps the flow moving for users who want to add multiple tags
       continueTaggingSession()
     }
   }
@@ -289,11 +329,12 @@ function App() {
   const continueTaggingSession = () => {
     if (!inlineTagEdit) return
     
-    // Clear query and auto-advance to first unselected tag
+    // UX: Auto-advance to next unselected tag for efficient multi-tag selection
+    // Clear search query and position cursor on next relevant tag
     const note = notes.find(n => n.id === inlineTagEdit.noteId)
     if (!note) return
     
-    // Find first unselected tag to highlight
+    // UX: Find first unselected tag to highlight for continued tagging efficiency
     const allTags = getFilteredTagOptions('')
     const firstUnselectedIndex = allTags.findIndex(tag => 
       !tag.isNew && !note.tagIds.includes(tag.id)
@@ -357,63 +398,94 @@ function App() {
     return filtered
   }
 
-  // Keyboard shortcuts
+  // UX: Global keyboard shortcuts for efficient note and tag management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // New note shortcut
-      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+      // UX: Prevent global shortcuts when user is typing in tag search to avoid conflicts
+      const isTagInputFocused = document.activeElement?.classList.contains('tag-search-input')
+      
+      // UX: Escape to exit "Edit Tags" mode on existing notes (but not first note)
+      // First note always shows all tags, so escape shouldn't hide them
+      if (e.key === 'Escape' && !isTagInputFocused && !inlineTagEdit && editingTags) {
+        const editingNote = notes.find(note => note.id === editingTags)
+        const editingNoteIndex = notes.findIndex(note => note.id === editingTags)
+        // UX: Only allow escape for non-first notes since first note should always show all tags
+        if (editingNote && editingNoteIndex > 0) {
+          e.preventDefault()
+          setEditingTags(null)
+        }
+      }
+      
+      // UX: Cmd+Enter creates new note (save and create new pattern)
+      // Always handle this globally - exit tag editing first if active, then create new note
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault()
+        // UX: Exit tag editing mode first if active, then create new note
+        if (inlineTagEdit) {
+          setInlineTagEdit(null)
+        }
         createNewNote()
       }
       
-      // Inline tag edit shortcut (Cmd+I)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+      // UX: Cmd+I opens inline tag editing for lightweight tag selection
+      // Alternative to clicking "Edit Tags" - provides fuzzy search and keyboard navigation
+      if ((e.metaKey || e.ctrlKey) && e.key === 'i' && !isTagInputFocused) {
         e.preventDefault()
         if (activeNoteId && !inlineTagEdit) {
           startInlineTagEdit(activeNoteId)
         }
       }
-      
-      // Handle inline tag edit navigation
-      if (inlineTagEdit) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          exitInlineTagEdit()
-        } else if (e.key === 'Enter') {
-          e.preventDefault()
-          const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
-          if (filteredOptions.length > 0) {
-            const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
-            if (highlightedOption?.isNew) {
-              confirmCreateTag()
-            } else {
-              toggleHighlightedTag()
-            }
-          } else {
-            exitInlineTagEdit()
-          }
-        } else if (e.key === ' ') {
-          e.preventDefault()
-          toggleHighlightedTag()
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault()
-          navigateInlineTagEdit('up')
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault()
-          navigateInlineTagEdit('down')
-        } else if (e.key === 'Tab') {
-          e.preventDefault()
-          if (e.shiftKey) {
-            navigateInlineTagEdit('up') // Shift+Tab goes backwards
-          } else {
-            navigateInlineTagEdit('down') // Tab advances to next item
-          }
-        }
-      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [inlineTagEdit, activeNoteId])
+  }, [inlineTagEdit, activeNoteId, editingTags, notes])
+
+  // UX: Dedicated keyboard handler for tag search input with specialized navigation
+  const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
+    if (!inlineTagEdit) return
+    
+    // UX: Cmd+Enter is handled by global handler - don't handle it here to avoid double-firing
+    
+    if (e.key === 'Escape') {
+      // UX: Exit tag search and return focus to note content for seamless writing
+      e.preventDefault()
+      exitInlineTagEdit()
+    } else if (e.key === 'Enter') {
+      // UX: Enter selects highlighted tag or creates new tag
+      e.preventDefault()
+      const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
+      if (filteredOptions.length > 0) {
+        const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
+        if (highlightedOption?.isNew) {
+          confirmCreateTag() // UX: Create new tag when "Create" option is highlighted
+        } else {
+          toggleHighlightedTag() // UX: Toggle existing tag selection
+        }
+      } else {
+        exitInlineTagEdit() // UX: Exit if no options available
+      }
+    } else if (e.key === ' ') {
+      // UX: Space bar also selects tags for quick keyboard-only interaction
+      e.preventDefault()
+      toggleHighlightedTag()
+    } else if (e.key === 'ArrowUp') {
+      // UX: Arrow key navigation through tag options
+      e.preventDefault()
+      navigateInlineTagEdit('up')
+    } else if (e.key === 'ArrowDown') {
+      // UX: Arrow key navigation through tag options
+      e.preventDefault()
+      navigateInlineTagEdit('down')
+    } else if (e.key === 'Tab') {
+      // UX: Tab navigation as alternative to arrow keys for power users
+      e.preventDefault()
+      if (e.shiftKey) {
+        navigateInlineTagEdit('up') // UX: Shift+Tab goes backwards through options
+      } else {
+        navigateInlineTagEdit('down') // UX: Tab advances to next option
+      }
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
@@ -426,7 +498,7 @@ function App() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
           >
             <span className="text-lg">+</span>
-            <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">⌘/</kbd>
+            <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">⌘↵</kbd>
           </button>
         </div>
         
@@ -435,14 +507,21 @@ function App() {
           {notes.map((note, index) => (
             <div 
               key={note.id}
-              className={`bg-white rounded-lg shadow-sm border-2 p-4 relative ${
+              className={`bg-white rounded-lg shadow-sm border-2 p-4 relative transition-all duration-300 ease-out ${
                 note.id === activeNoteId ? 'border-blue-400' : 'border-gray-200'
-              } ${note.isBookmarked ? 'bg-yellow-50' : ''}`}
+              } ${note.isBookmarked ? 'bg-yellow-50' : ''} ${
+                note.isNew ? 'animate-expandIn' : ''
+              }`}
               onClick={() => {
                 setActiveNoteId(note.id)
-                // Close edit tags mode when clicking a different note
+                // UX: Close edit tags mode when clicking a different note to avoid confusion
                 if (editingTags && editingTags !== note.id) {
                   setEditingTags(null)
+                }
+                // UX: Clear inline tag editing when switching notes for clean state
+                // User should focus on the new note, not continue editing tags on old note
+                if (inlineTagEdit && inlineTagEdit.noteId !== note.id) {
+                  setInlineTagEdit(null)
                 }
               }}
             >
@@ -494,14 +573,16 @@ function App() {
               {/* Tags section */}
               <div className="flex flex-wrap gap-2 mb-3 pr-24 md:pr-32">
                 {inlineTagEdit?.noteId === note.id ? (
-                  // Inline tag editing mode
+                  // UX: Inline tag editing mode - lightweight alternative to showing all tags
+                  // Provides fuzzy search and keyboard navigation for efficient tag selection
                   <div className="w-full">
                     <input
                       type="text"
                       value={inlineTagEdit.query}
                       onChange={(e) => updateInlineTagQuery(e.target.value)}
+                      onKeyDown={handleTagInputKeyDown}
                       placeholder="Type to search tags..."
-                      className="w-full px-3 py-2 border-2 border-blue-400 rounded-md outline-none text-sm"
+                      className="tag-search-input w-full px-3 py-2 border-2 border-blue-400 rounded-md outline-none text-sm"
                       autoFocus
                       onClick={(e) => e.stopPropagation()}
                     />
@@ -538,7 +619,8 @@ function App() {
                     </div>
                   </div>
                 ) : index === 0 || editingTags === note.id ? (
-                  // Show all tags for first note or when editing
+                  // UX: Show all tags for first note (always expanded for easy initial tagging)
+                  // OR when explicitly editing existing notes (via "Edit Tags" button)
                   <>
                     {tags.map(tag => (
                       <button
@@ -595,7 +677,8 @@ function App() {
                     )}
                   </>
                 ) : (
-                  // Show only active tags for existing notes
+                  // UX: Show only selected tags for existing notes to keep layout clean
+                  // Plus "Edit Tags" button to expand when needed
                   <>
                     {note.tagIds.map(tagId => {
                       const tag = tags.find(t => t.id === tagId)
@@ -646,6 +729,13 @@ function App() {
                   autoResizeTextarea(e.target)
                 }}
                 onInput={(e) => autoResizeTextarea(e.target as HTMLTextAreaElement)}
+                onFocus={() => {
+                  // UX: Clear tag editing when user clicks into note content
+                  // User intends to write, so exit tag mode and focus on writing
+                  if (inlineTagEdit) {
+                    setInlineTagEdit(null)
+                  }
+                }}
                 placeholder="Start typing..."
               />
 
@@ -673,7 +763,7 @@ function App() {
       <button
         onClick={createNewNote}
         className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-blue-600 transition-colors z-10"
-        title="New Note (⌘/)"
+        title="New Note (⌘↵)"
       >
         +
       </button>
