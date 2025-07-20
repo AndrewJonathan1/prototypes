@@ -22,6 +22,7 @@ function App() {
   const [editingTags, setEditingTags] = useState<string | null>(null)
   const [newTagInput, setNewTagInput] = useState<string>('')
   const [creatingTagForNote, setCreatingTagForNote] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes')
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
 
   // Initialize with an empty note and some sample tags
@@ -166,11 +167,12 @@ function App() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
       <div className="max-w-3xl mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800">Notes</h1>
+        <h1 className="text-2xl font-bold mb-6 text-gray-800 hidden md:block">Notes</h1>
         
-        <div className="space-y-4">
+        {activeTab === 'notes' && (
+          <div className="space-y-4">
           {notes.map((note, index) => (
             <div 
               key={note.id}
@@ -186,18 +188,18 @@ function App() {
               }}
             >
               {/* Action buttons */}
-              <div className="absolute top-4 right-4 flex items-center gap-2">
+              <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center gap-1 md:gap-2">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     toggleBookmark(note.id)
                   }}
-                  className={`p-2 rounded hover:bg-gray-100 ${
+                  className={`p-1.5 md:p-2 rounded hover:bg-gray-100 ${
                     note.isBookmarked ? 'text-yellow-600' : 'text-gray-400'
                   }`}
                   title="Bookmark"
                 >
-                  <svg className="w-5 h-5" fill={note.isBookmarked ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 md:w-5 md:h-5" fill={note.isBookmarked ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                   </svg>
                 </button>
@@ -206,12 +208,12 @@ function App() {
                     e.stopPropagation()
                     toggleComplete(note.id)
                   }}
-                  className={`p-2 rounded hover:bg-gray-100 ${
+                  className={`p-1.5 md:p-2 rounded hover:bg-gray-100 ${
                     note.isCompleted ? 'text-green-600' : 'text-gray-400'
                   }`}
                   title="Complete"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </button>
@@ -222,16 +224,16 @@ function App() {
                       archiveNote(note.id)
                     }
                   }}
-                  className="p-2 rounded hover:bg-gray-100 text-gray-400"
+                  className="p-1.5 md:p-2 rounded hover:bg-gray-100 text-gray-400"
                   title="Archive"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                   </svg>
                 </button>
               </div>
               {/* Tags section */}
-              <div className="flex flex-wrap gap-2 mb-3 pr-32">
+              <div className="flex flex-wrap gap-2 mb-3 pr-24 md:pr-32">
                 {index === 0 || editingTags === note.id ? (
                   // Show all tags for first note or when editing
                   <>
@@ -340,6 +342,46 @@ function App() {
               )}
             </div>
           ))}
+          </div>
+        )}
+        
+        {activeTab === 'tags' && (
+          <div className="bg-white rounded-lg shadow-sm border-2 border-gray-200 p-8 text-center">
+            <h2 className="text-xl font-semibold text-gray-700 mb-4">Tags Management</h2>
+            <p className="text-gray-500">Tag management features coming soon...</p>
+          </div>
+        )}
+      </div>
+      
+      {/* Mobile bottom navigation */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden">
+        <div className="flex">
+          <button
+            onClick={() => setActiveTab('notes')}
+            className={`flex-1 py-4 text-center ${
+              activeTab === 'notes' 
+                ? 'text-blue-600 border-t-2 border-blue-600' 
+                : 'text-gray-600'
+            }`}
+          >
+            <svg className="w-6 h-6 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
+            </svg>
+            <span className="text-xs">Notes</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('tags')}
+            className={`flex-1 py-4 text-center ${
+              activeTab === 'tags' 
+                ? 'text-blue-600 border-t-2 border-blue-600' 
+                : 'text-gray-600'
+            }`}
+          >
+            <svg className="w-6 h-6 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+            </svg>
+            <span className="text-xs">Tags</span>
+          </button>
         </div>
       </div>
     </div>
