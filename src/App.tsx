@@ -23,6 +23,7 @@ function App() {
   const [newTagInput, setNewTagInput] = useState<string>('')
   const [creatingTagForNote, setCreatingTagForNote] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes')
+  const [saving, setSaving] = useState<string | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
 
   // Initialize with an empty note and some sample tags
@@ -55,6 +56,7 @@ function App() {
   }, [activeNoteId])
 
   const updateNote = (noteId: string, content: string) => {
+    setSaving(noteId)
     setNotes(prevNotes => 
       prevNotes.map(note => 
         note.id === noteId 
@@ -62,6 +64,8 @@ function App() {
           : note
       )
     )
+    // Clear saving indicator after a short delay
+    setTimeout(() => setSaving(null), 500)
   }
 
   const createNewNote = () => {
@@ -154,10 +158,10 @@ function App() {
     }
   }
 
-  // Keyboard shortcut for new note
+  // Keyboard shortcut for new note (Cmd+/ to avoid browser conflicts)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault()
         createNewNote()
       }
@@ -169,7 +173,17 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
       <div className="max-w-3xl mx-auto p-4">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800 hidden md:block">Notes</h1>
+        {/* Desktop header with New Note button */}
+        <div className="hidden md:flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-800">Notes</h1>
+          <button
+            onClick={createNewNote}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          >
+            <span className="text-lg">+</span>
+            <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">⌘/</kbd>
+          </button>
+        </div>
         
         {activeTab === 'notes' && (
           <div className="space-y-4">
@@ -318,9 +332,17 @@ function App() {
                 )}
               </div>
 
-              {/* Date created */}
-              <div className="text-sm text-gray-500 mb-2">
-                {note.createdAt.toLocaleDateString()}
+              {/* Date created with save indicator */}
+              <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                <span>{note.createdAt.toLocaleDateString()}</span>
+                {saving === note.id && (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Saving...
+                  </span>
+                )}
               </div>
 
               {/* Note content */}
@@ -352,6 +374,15 @@ function App() {
           </div>
         )}
       </div>
+      
+      {/* Mobile FAB for new note */}
+      <button
+        onClick={createNewNote}
+        className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-blue-600 transition-colors z-10"
+        title="New Note (⌘/)"
+      >
+        +
+      </button>
       
       {/* Mobile bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden">
