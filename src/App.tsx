@@ -48,12 +48,19 @@ function App() {
     ])
   }, [])
 
-  // Auto-focus active note
+  // Auto-focus active note and resize textarea
   useEffect(() => {
     if (activeNoteRef.current) {
       activeNoteRef.current.focus()
+      autoResizeTextarea(activeNoteRef.current)
     }
   }, [activeNoteId])
+
+  // Resize all textareas on mount and when notes change
+  useEffect(() => {
+    const textareas = document.querySelectorAll('textarea')
+    textareas.forEach(textarea => autoResizeTextarea(textarea as HTMLTextAreaElement))
+  }, [notes])
 
   const updateNote = (noteId: string, content: string) => {
     setSaving(noteId)
@@ -66,6 +73,11 @@ function App() {
     )
     // Clear saving indicator after a short delay
     setTimeout(() => setSaving(null), 500)
+  }
+
+  const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
+    textarea.style.height = 'auto'
+    textarea.style.height = `${textarea.scrollHeight}px`
   }
 
   const createNewNote = () => {
@@ -348,11 +360,15 @@ function App() {
               {/* Note content */}
               <textarea
                 ref={note.id === activeNoteId ? activeNoteRef : null}
-                className={`w-full min-h-[100px] resize-none outline-none ${
+                className={`w-full min-h-[100px] resize-none outline-none overflow-hidden ${
                   note.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'
                 }`}
                 value={note.content}
-                onChange={(e) => updateNote(note.id, e.target.value)}
+                onChange={(e) => {
+                  updateNote(note.id, e.target.value)
+                  autoResizeTextarea(e.target)
+                }}
+                onInput={(e) => autoResizeTextarea(e.target as HTMLTextAreaElement)}
                 placeholder="Start typing..."
               />
 
