@@ -24,6 +24,12 @@ function App() {
   const [creatingTagForNote, setCreatingTagForNote] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes')
   const [saving, setSaving] = useState<string | null>(null)
+  const [hashtagPopup, setHashtagPopup] = useState<{
+    isOpen: boolean
+    noteId: string
+    query: string
+    startPos: number
+  } | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
 
   // Initialize with an empty note and some sample tags
@@ -170,6 +176,59 @@ function App() {
     }
   }
 
+  const handleHashtagInput = (noteId: string, content: string, selectionStart: number) => {
+    // Look for # followed by text
+    const beforeCursor = content.substring(0, selectionStart)
+    const hashMatch = beforeCursor.match(/#(\w*)$/)
+    
+    if (hashMatch) {
+      const startPos = selectionStart - hashMatch[0].length
+      const query = hashMatch[1]
+      setHashtagPopup({
+        isOpen: true,
+        noteId,
+        query,
+        startPos
+      })
+    } else {
+      setHashtagPopup(null)
+    }
+  }
+
+  const selectHashtagTag = (tagId: string, tagName: string) => {
+    if (!hashtagPopup) return
+    
+    const note = notes.find(n => n.id === hashtagPopup.noteId)
+    if (!note) return
+    
+    // Remove the hashtag text and replace with nothing
+    const beforeHashtag = note.content.substring(0, hashtagPopup.startPos)
+    const afterHashtag = note.content.substring(hashtagPopup.startPos + hashtagPopup.query.length + 1) // +1 for the #
+    const newContent = beforeHashtag + afterHashtag
+    
+    // Add tag to note and update content
+    setNotes(prevNotes =>
+      prevNotes.map(n =>
+        n.id === hashtagPopup.noteId
+          ? {
+              ...n,
+              content: newContent,
+              tagIds: n.tagIds.includes(tagId) ? n.tagIds : [...n.tagIds, tagId],
+              updatedAt: new Date()
+            }
+          : n
+      )
+    )
+    
+    setHashtagPopup(null)
+  }
+
+  const filteredTags = hashtagPopup 
+    ? tags.filter(tag => 
+        tag.name.toLowerCase().includes(hashtagPopup.query.toLowerCase())
+      )
+    : []
+
   // Keyboard shortcut for new note (Cmd+/ to avoid browser conflicts)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -177,10 +236,21 @@ function App() {
         e.preventDefault()
         createNewNote()
       }
+      
+      // Handle hashtag popup keyboard navigation
+      if (hashtagPopup?.isOpen) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setHashtagPopup(null)
+        } else if (e.key === 'Enter' && filteredTags.length > 0) {
+          e.preventDefault()
+          selectHashtagTag(filteredTags[0].id, filteredTags[0].name)
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [hashtagPopup, filteredTags])
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
@@ -360,17 +430,57 @@ function App() {
               {/* Note content */}
               <textarea
                 ref={note.id === activeNoteId ? activeNoteRef : null}
-                className={`w-full min-h-[100px] resize-none outline-none overflow-hidden ${
+                className={`w-full min-h-[1.5rem] resize-none outline-none overflow-hidden ${
                   note.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'
                 }`}
                 value={note.content}
                 onChange={(e) => {
                   updateNote(note.id, e.target.value)
                   autoResizeTextarea(e.target)
+                  handleHashtagInput(note.id, e.target.value, e.target.selectionStart || 0)
                 }}
                 onInput={(e) => autoResizeTextarea(e.target as HTMLTextAreaElement)}
                 placeholder="Start typing..."
               />
+
+              {/* Hashtag autocomplete popup */}
+              {hashtagPopup?.isOpen && hashtagPopup.noteId === note.id && (
+                <div className="relative">
+                  <div className="absolute top-1 left-0 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto z-20 min-w-[200px]">
+                    {filteredTags.length > 0 ? (
+                      filteredTags.map(tag => (
+                        <button
+                          key={tag.id}
+                          onClick={() => selectHashtagTag(tag.id, tag.name)}
+                          className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2"
+                        >
+                          <span className="text-blue-600">#</span>
+                          <span>{tag.name}</span>
+                        </button>
+                      ))
+                    ) : hashtagPopup.query.trim() ? (
+                      <button
+                        onClick={() => {
+                          const newTag: Tag = {
+                            id: Date.now().toString(),
+                            name: hashtagPopup.query.trim()
+                          }
+                          setTags(prevTags => [...prevTags, newTag])
+                          selectHashtagTag(newTag.id, newTag.name)
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-green-50 flex items-center gap-2 text-green-600"
+                      >
+                        <span>+</span>
+                        <span>Create tag "{hashtagPopup.query}"</span>
+                      </button>
+                    ) : (
+                      <div className="px-3 py-2 text-gray-500 text-sm">
+                        Type to search or create tags
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Last updated - only show for existing notes with content */}
               {index > 0 && note.content && (
