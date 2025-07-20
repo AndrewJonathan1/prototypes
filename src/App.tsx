@@ -469,7 +469,7 @@ function App() {
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Tab/Shift+Tab/↑↓ navigate • Space to toggle • Enter to select/create • Escape to finish
+                      Tab/Shift+Tab/↑↓ navigate • Space/Enter to select • Escape to finish
                     </div>
                   </div>
                 ) : index === 0 || editingTags === note.id ? (
