@@ -229,9 +229,22 @@ function App() {
         // This could show a confirmation or just do nothing
         return
       } else {
-        // Toggle existing tag and continue tagging session
+        // Toggle existing tag and optionally continue tagging session
         toggleTag(inlineTagEdit.noteId, highlightedOption.id)
-        continueTaggingSession()
+        
+        // Only auto-advance if user typed a search and there's exactly one result
+        const shouldAutoAdvance = inlineTagEdit.query.trim() && 
+          getFilteredTagOptions(inlineTagEdit.query).length === 1
+        
+        if (shouldAutoAdvance) {
+          continueTaggingSession()
+        } else {
+          // Just clear the query but stay on current position
+          setInlineTagEdit({
+            ...inlineTagEdit,
+            query: ''
+          })
+        }
       }
     }
   }
@@ -250,6 +263,8 @@ function App() {
       }
       setTags(prevTags => [...prevTags, newTag])
       toggleTag(inlineTagEdit.noteId, newTag.id)
+      
+      // For new tag creation, always auto-advance since user explicitly created something
       continueTaggingSession()
     }
   }
