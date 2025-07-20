@@ -246,18 +246,20 @@ function App() {
   }
 
   const getFilteredTagOptions = (query: string) => {
+    const matchingTags = tags.filter(tag => 
+      tag.name.toLowerCase().includes(query.toLowerCase())
+    ).map(tag => ({ ...tag, isNew: false }))
+    
+    // Only show "create new" option if query doesn't match any existing tags AND has content
+    const shouldShowCreateOption = query.trim() && 
+      matchingTags.length === 0 && 
+      !tags.some(tag => tag.name.toLowerCase() === query.toLowerCase())
+    
     const filtered = [
-      // Existing tags that match the query
-      ...tags.filter(tag => 
-        tag.name.toLowerCase().includes(query.toLowerCase())
-      ).map(tag => ({ ...tag, isNew: false })),
-      // Option to create new tag if query doesn't match existing
-      ...(query.trim() && 
-         !tags.some(tag => tag.name.toLowerCase() === query.toLowerCase())
-        ? [{ id: 'new', name: query.trim(), isNew: true }]
-        : []
-      )
+      ...matchingTags,
+      ...(shouldShowCreateOption ? [{ id: 'new', name: query.trim(), isNew: true }] : [])
     ]
+    
     return filtered
   }
 
