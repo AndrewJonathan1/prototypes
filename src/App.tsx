@@ -285,7 +285,11 @@ function App() {
           exitInlineTagEdit()
         } else if (e.key === 'Enter') {
           e.preventDefault()
-          exitInlineTagEdit()
+          if (getFilteredTagOptions(inlineTagEdit.query).length > 0) {
+            toggleHighlightedTag()
+          } else {
+            exitInlineTagEdit()
+          }
         } else if (e.key === ' ') {
           e.preventDefault()
           toggleHighlightedTag()
@@ -399,7 +403,11 @@ function App() {
                           key={option.id}
                           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
                             index === inlineTagEdit.highlightedIndex
-                              ? 'bg-blue-500 text-white ring-2 ring-blue-300'
+                              ? option.isNew
+                                ? 'bg-green-100 text-green-700 ring-2 ring-green-400'
+                                : note.tagIds.includes(option.id)
+                                ? 'bg-blue-500 text-white ring-2 ring-blue-300'
+                                : 'bg-gray-200 text-gray-700 ring-2 ring-blue-400'
                               : option.isNew
                               ? 'bg-green-100 text-green-700'
                               : note.tagIds.includes(option.id)
@@ -408,7 +416,6 @@ function App() {
                           }`}
                         >
                           {option.isNew ? `+ Create "${option.name}"` : option.name}
-                          {!option.isNew && note.tagIds.includes(option.id) && ' ✓'}
                         </div>
                       ))}
                       {getFilteredTagOptions(inlineTagEdit.query).length === 0 && inlineTagEdit.query && (
@@ -418,7 +425,7 @@ function App() {
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      ↑↓ navigate • Space to toggle • Enter to finish
+                      ↑↓ navigate • Space/Enter to toggle • Escape to finish
                     </div>
                   </div>
                 ) : index === 0 || editingTags === note.id ? (
