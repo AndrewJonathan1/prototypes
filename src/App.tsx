@@ -441,6 +441,34 @@ function App() {
           startInlineTagEdit(activeNoteId)
         }
       }
+      
+      // UX: Cmd+Up/Down for note navigation - efficient keyboard-only workflow
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && !isTagInputFocused && !inlineTagEdit) {
+        e.preventDefault()
+        const currentIndex = notes.findIndex(note => note.id === activeNoteId)
+        let newIndex = currentIndex
+        
+        if (e.key === 'ArrowUp' && currentIndex > 0) {
+          newIndex = currentIndex - 1
+        } else if (e.key === 'ArrowDown' && currentIndex < notes.length - 1) {
+          newIndex = currentIndex + 1
+        }
+        
+        if (newIndex !== currentIndex) {
+          setActiveNoteId(notes[newIndex].id)
+          // UX: Clear any tag editing state when switching notes
+          if (editingTags) setEditingTags(null)
+          if (inlineTagEdit) setInlineTagEdit(null)
+          
+          // UX: Focus and position cursor at beginning of new note
+          setTimeout(() => {
+            if (activeNoteRef.current) {
+              activeNoteRef.current.focus()
+              activeNoteRef.current.setSelectionRange(0, 0)
+            }
+          }, 0)
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -804,6 +832,13 @@ function App() {
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Keyboard-based tagging</span>
               <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}I</kbd>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Navigate between notes</span>
+              <div className="flex gap-1">
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">{modKey}↑</kbd>
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">{modKey}↓</kbd>
+              </div>
             </div>
             <div className="border-t pt-2 mt-2">
               <div className="text-gray-500 text-xs mb-1">In tag mode:</div>
