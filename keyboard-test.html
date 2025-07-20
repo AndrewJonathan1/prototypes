@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyboard Shortcuts Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .shortcut-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .shortcut-item.triggered {
+            border-color: #22c55e;
+            background: #dcfce7;
+        }
+        .key-combo {
+            background: #e5e7eb;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+        .status {
+            font-weight: 500;
+            color: #6b7280;
+        }
+        .status.success {
+            color: #059669;
+        }
+        .log {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: #1f2937;
+            color: #f3f4f6;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            min-height: 200px;
+            overflow-y: auto;
+        }
+        .note {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+        .test-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0.5rem;
+            transition: background 0.2s;
+        }
+        .test-button:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Keyboard Shortcuts Test Page</h1>
+        
+        <div class="note">
+            <strong>Note:</strong> This page tests whether browser keyboard shortcuts can be intercepted. 
+            Some shortcuts like Cmd+N and Cmd+T are typically reserved by browsers and may not be interceptable.
+        </div>
+
+        <h2>Shortcuts to Test:</h2>
+        
+        <div class="shortcut-item" id="cmd-n">
+            <span>New Note</span>
+            <span class="key-combo">⌘+N / Ctrl+N</span>
+            <span class="status">Not triggered</span>
+        </div>
+        
+        <div class="shortcut-item" id="cmd-t">
+            <span>New Tab Test</span>
+            <span class="key-combo">⌘+T / Ctrl+T</span>
+            <span class="status">Not triggered</span>
+        </div>
+        
+        <div class="shortcut-item" id="cmd-enter">
+            <span>Create Note (Alternative)</span>
+            <span class="key-combo">⌘+Enter / Ctrl+Enter</span>
+            <span class="status">Not triggered</span>
+        </div>
+        
+        <div class="shortcut-item" id="cmd-shift-n">
+            <span>New Note (Shift variant)</span>
+            <span class="key-combo">⌘+Shift+N / Ctrl+Shift+N</span>
+            <span class="status">Not triggered</span>
+        </div>
+        
+        <div class="shortcut-item" id="alt-n">
+            <span>Alt+N Test</span>
+            <span class="key-combo">Alt+N</span>
+            <span class="status">Not triggered</span>
+        </div>
+
+        <h3>Test Buttons:</h3>
+        <button class="test-button" onclick="simulateNewNote()">Simulate New Note Action</button>
+        <button class="test-button" onclick="clearLog()">Clear Log</button>
+        
+        <h3>Event Log:</h3>
+        <div class="log" id="event-log"></div>
+    </div>
+
+    <script>
+        const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+        const modKey = isMac ? 'Cmd' : 'Ctrl';
+        
+        function log(message) {
+            const logElement = document.getElementById('event-log');
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        function updateShortcutStatus(id, triggered = true) {
+            const element = document.getElementById(id);
+            const statusElement = element.querySelector('.status');
+            
+            if (triggered) {
+                element.classList.add('triggered');
+                statusElement.textContent = 'TRIGGERED!';
+                statusElement.classList.add('success');
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    element.classList.remove('triggered');
+                    statusElement.textContent = 'Not triggered';
+                    statusElement.classList.remove('success');
+                }, 2000);
+            }
+        }
+        
+        function simulateNewNote() {
+            log('🟢 New note action simulated successfully!');
+            updateShortcutStatus('cmd-n');
+        }
+        
+        function clearLog() {
+            document.getElementById('event-log').innerHTML = '';
+        }
+        
+        // Global keyboard event listener
+        document.addEventListener('keydown', function(e) {
+            const keyCombo = [];
+            
+            if (e.ctrlKey) keyCombo.push('Ctrl');
+            if (e.metaKey) keyCombo.push('Cmd');
+            if (e.altKey) keyCombo.push('Alt');
+            if (e.shiftKey) keyCombo.push('Shift');
+            
+            keyCombo.push(e.key.toUpperCase());
+            
+            const combo = keyCombo.join('+');
+            log(`🔹 Key pressed: ${combo} (keyCode: ${e.keyCode})`);
+            
+            // Test Cmd+N / Ctrl+N
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !e.shiftKey) {
+                log('🟡 Attempting to prevent Cmd+N...');
+                e.preventDefault();
+                e.stopPropagation();
+                log('🟢 Cmd+N intercepted! New note action triggered.');
+                updateShortcutStatus('cmd-n');
+                simulateNewNote();
+                return false;
+            }
+            
+            // Test Cmd+T / Ctrl+T
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 't') {
+                log('🟡 Attempting to prevent Cmd+T...');
+                e.preventDefault();
+                e.stopPropagation();
+                log('🟢 Cmd+T intercepted!');
+                updateShortcutStatus('cmd-t');
+                return false;
+            }
+            
+            // Test Cmd+Enter / Ctrl+Enter
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                log('🟡 Attempting to prevent Cmd+Enter...');
+                e.preventDefault();
+                e.stopPropagation();
+                log('🟢 Cmd+Enter intercepted!');
+                updateShortcutStatus('cmd-enter');
+                return false;
+            }
+            
+            // Test Cmd+Shift+N / Ctrl+Shift+N
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
+                log('🟡 Attempting to prevent Cmd+Shift+N...');
+                e.preventDefault();
+                e.stopPropagation();
+                log('🟢 Cmd+Shift+N intercepted!');
+                updateShortcutStatus('cmd-shift-n');
+                return false;
+            }
+            
+            // Test Alt+N
+            if (e.altKey && e.key.toLowerCase() === 'n') {
+                log('🟡 Attempting to prevent Alt+N...');
+                e.preventDefault();
+                e.stopPropagation();
+                log('🟢 Alt+N intercepted!');
+                updateShortcutStatus('alt-n');
+                return false;
+            }
+        });
+        
+        // Prevent default for some events
+        document.addEventListener('keyup', function(e) {
+            if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 't')) {
+                e.preventDefault();
+                return false;
+            }
+        });
+        
+        // Log when page loads
+        window.addEventListener('load', function() {
+            log('🚀 Keyboard shortcuts test page loaded');
+            log(`🖥️ Platform detected: ${isMac ? 'Mac' : 'PC'} (using ${modKey} key)`);
+            log('👆 Try pressing the keyboard shortcuts listed above...');
+        });
+        
+        // Prevent context menu on right click to test more key combinations
+        document.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
