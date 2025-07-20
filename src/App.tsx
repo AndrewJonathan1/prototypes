@@ -38,12 +38,11 @@ function App() {
     highlightedIndex: number
   } | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // UX: Platform detection for cross-platform keyboard shortcuts
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
   const modKey = isMac ? '⌘' : 'Ctrl'
-  const modKeyName = isMac ? 'Cmd' : 'Ctrl'
 
   // UX: Prevent empty note creation to avoid clutter in the notes list
   // Users should add content or tags before creating new notes to maintain meaningful organization
@@ -127,78 +126,6 @@ function App() {
     }, 500)
   }
 
-  // UX: Detect hashtag typing for inline tag autocomplete
-  const detectHashtagAtCursor = (content: string, cursorPos: number) => {
-    // Find hashtag at or before cursor position
-    let hashStart = -1
-    let hashEnd = cursorPos
-    
-    // Look backwards from cursor to find start of hashtag
-    for (let i = cursorPos - 1; i >= 0; i--) {
-      const char = content[i]
-      if (char === '#') {
-        hashStart = i
-        break
-      }
-      if (char === ' ' || char === '\n' || char === '\t') {
-        break // Hit whitespace before finding #
-      }
-    }
-    
-    // If we found a hashtag start, find the end
-    if (hashStart !== -1) {
-      for (let i = hashStart + 1; i < content.length; i++) {
-        const char = content[i]
-        if (char === ' ' || char === '\n' || char === '\t') {
-          hashEnd = i
-          break
-        }
-      }
-      
-      const hashtagText = content.slice(hashStart + 1, hashEnd) // Remove the #
-      return { start: hashStart, end: hashEnd, query: hashtagText }
-    }
-    
-    return null
-  }
-
-  // UX: Calculate pixel position of cursor in textarea for dropdown placement
-  const getCaretPixelPosition = (textarea: HTMLTextAreaElement, caretPos: number) => {
-    // Create a temporary div to measure text dimensions
-    const tempDiv = document.createElement('div')
-    const computedStyle = window.getComputedStyle(textarea)
-    
-    // Copy textarea styles to temp div
-    tempDiv.style.position = 'absolute'
-    tempDiv.style.visibility = 'hidden'
-    tempDiv.style.whiteSpace = 'pre-wrap'
-    tempDiv.style.wordWrap = 'break-word'
-    tempDiv.style.font = computedStyle.font
-    tempDiv.style.padding = computedStyle.padding
-    tempDiv.style.width = computedStyle.width
-    tempDiv.style.lineHeight = computedStyle.lineHeight
-    
-    document.body.appendChild(tempDiv)
-    
-    // Get text up to caret position
-    const textUpToCaret = textarea.value.substring(0, caretPos)
-    tempDiv.textContent = textUpToCaret
-    
-    // Add a span to measure the exact position
-    const caretSpan = document.createElement('span')
-    caretSpan.textContent = '|'
-    tempDiv.appendChild(caretSpan)
-    
-    const rect = textarea.getBoundingClientRect()
-    const spanRect = caretSpan.getBoundingClientRect()
-    
-    document.body.removeChild(tempDiv)
-    
-    return {
-      top: spanRect.top - rect.top + textarea.scrollTop,
-      left: spanRect.left - rect.left + textarea.scrollLeft
-    }
-  }
 
   const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
     textarea.style.height = 'auto'
