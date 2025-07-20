@@ -19,9 +19,12 @@ function App() {
   const [notes, setNotes] = useState<Note[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [activeNoteId, setActiveNoteId] = useState<string>('')
+  const [editingTags, setEditingTags] = useState<string | null>(null)
+  const [newTagInput, setNewTagInput] = useState<string>('')
+  const [creatingTagForNote, setCreatingTagForNote] = useState<string | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
 
-  // Initialize with an empty note
+  // Initialize with an empty note and some sample tags
   useEffect(() => {
     const initialNote: Note = {
       id: Date.now().toString(),
@@ -34,6 +37,13 @@ function App() {
     }
     setNotes([initialNote])
     setActiveNoteId(initialNote.id)
+    
+    // Sample tags
+    setTags([
+      { id: '1', name: 'work' },
+      { id: '2', name: 'personal' },
+      { id: '3', name: 'ideas' }
+    ])
   }, [])
 
   // Auto-focus active note
@@ -82,6 +92,38 @@ function App() {
     return date.toLocaleDateString()
   }
 
+  const toggleTag = (noteId: string, tagId: string) => {
+    setNotes(prevNotes =>
+      prevNotes.map(note =>
+        note.id === noteId
+          ? {
+              ...note,
+              tagIds: note.tagIds.includes(tagId)
+                ? note.tagIds.filter(id => id !== tagId)
+                : [...note.tagIds, tagId],
+              updatedAt: new Date()
+            }
+          : note
+      )
+    )
+  }
+
+  const createTag = (name: string) => {
+    const newTag: Tag = {
+      id: Date.now().toString(),
+      name: name.trim()
+    }
+    setTags(prevTags => [...prevTags, newTag])
+    
+    // If creating for a specific note, add it immediately
+    if (creatingTagForNote) {
+      toggleTag(creatingTagForNote, newTag.id)
+    }
+    
+    setNewTagInput('')
+    setCreatingTagForNote(null)
+  }
+
   // Keyboard shortcut for new note
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -106,8 +148,100 @@ function App() {
               className={`bg-white rounded-lg shadow-sm border-2 p-4 ${
                 note.id === activeNoteId ? 'border-blue-400' : 'border-gray-200'
               }`}
-              onClick={() => setActiveNoteId(note.id)}
+              onClick={() => {
+                setActiveNoteId(note.id)
+                // Close edit tags mode when clicking a different note
+                if (editingTags && editingTags !== note.id) {
+                  setEditingTags(null)
+                }
+              }}
             >
+              {/* Tags section */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {index === 0 || editingTags === note.id ? (
+                  // Show all tags for first note or when editing
+                  <>
+                    {tags.map(tag => (
+                      <button
+                        key={tag.id}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleTag(note.id, tag.id)
+                        }}
+                        className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                          note.tagIds.includes(tag.id)
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {tag.name}
+                      </button>
+                    ))}
+                    {creatingTagForNote === note.id ? (
+                      <input
+                        type="text"
+                        value={newTagInput}
+                        onChange={(e) => setNewTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newTagInput.trim()) {
+                            createTag(newTagInput)
+                          } else if (e.key === 'Escape') {
+                            setCreatingTagForNote(null)
+                            setNewTagInput('')
+                          }
+                        }}
+                        onBlur={() => {
+                          if (newTagInput.trim()) {
+                            createTag(newTagInput)
+                          } else {
+                            setCreatingTagForNote(null)
+                            setNewTagInput('')
+                          }
+                        }}
+                        className="px-3 py-1 rounded-full text-sm border-2 border-gray-300 outline-none focus:border-blue-400"
+                        placeholder="Tag name..."
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setCreatingTagForNote(note.id)
+                        }}
+                        className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      >
+                        + Create Tag
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  // Show only active tags for existing notes
+                  <>
+                    {note.tagIds.map(tagId => {
+                      const tag = tags.find(t => t.id === tagId)
+                      return tag ? (
+                        <span
+                          key={tag.id}
+                          className="px-3 py-1 rounded-full text-sm font-medium bg-blue-500 text-white"
+                        >
+                          {tag.name}
+                        </span>
+                      ) : null
+                    })}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEditingTags(note.id)
+                      }}
+                      className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    >
+                      Edit Tags
+                    </button>
+                  </>
+                )}
+              </div>
+
               {/* Date created */}
               <div className="text-sm text-gray-500 mb-2">
                 {note.createdAt.toLocaleDateString()}
