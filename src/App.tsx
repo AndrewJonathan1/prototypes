@@ -124,6 +124,35 @@ function App() {
     setCreatingTagForNote(null)
   }
 
+  const toggleBookmark = (noteId: string) => {
+    setNotes(prevNotes =>
+      prevNotes.map(note =>
+        note.id === noteId
+          ? { ...note, isBookmarked: !note.isBookmarked, updatedAt: new Date() }
+          : note
+      )
+    )
+  }
+
+  const toggleComplete = (noteId: string) => {
+    setNotes(prevNotes =>
+      prevNotes.map(note =>
+        note.id === noteId
+          ? { ...note, isCompleted: !note.isCompleted, updatedAt: new Date() }
+          : note
+      )
+    )
+  }
+
+  const archiveNote = (noteId: string) => {
+    setNotes(prevNotes => prevNotes.filter(note => note.id !== noteId))
+    // If we archived the active note, set a new active note
+    if (noteId === activeNoteId && notes.length > 1) {
+      const remainingNotes = notes.filter(note => note.id !== noteId)
+      setActiveNoteId(remainingNotes[0].id)
+    }
+  }
+
   // Keyboard shortcut for new note
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -145,9 +174,9 @@ function App() {
           {notes.map((note, index) => (
             <div 
               key={note.id}
-              className={`bg-white rounded-lg shadow-sm border-2 p-4 ${
+              className={`bg-white rounded-lg shadow-sm border-2 p-4 relative ${
                 note.id === activeNoteId ? 'border-blue-400' : 'border-gray-200'
-              }`}
+              } ${note.isBookmarked ? 'bg-yellow-50' : ''}`}
               onClick={() => {
                 setActiveNoteId(note.id)
                 // Close edit tags mode when clicking a different note
@@ -156,8 +185,53 @@ function App() {
                 }
               }}
             >
+              {/* Action buttons */}
+              <div className="absolute top-4 right-4 flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleBookmark(note.id)
+                  }}
+                  className={`p-2 rounded hover:bg-gray-100 ${
+                    note.isBookmarked ? 'text-yellow-600' : 'text-gray-400'
+                  }`}
+                  title="Bookmark"
+                >
+                  <svg className="w-5 h-5" fill={note.isBookmarked ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleComplete(note.id)
+                  }}
+                  className={`p-2 rounded hover:bg-gray-100 ${
+                    note.isCompleted ? 'text-green-600' : 'text-gray-400'
+                  }`}
+                  title="Complete"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirm('Archive this note?')) {
+                      archiveNote(note.id)
+                    }
+                  }}
+                  className="p-2 rounded hover:bg-gray-100 text-gray-400"
+                  title="Archive"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                  </svg>
+                </button>
+              </div>
               {/* Tags section */}
-              <div className="flex flex-wrap gap-2 mb-3">
+              <div className="flex flex-wrap gap-2 mb-3 pr-32">
                 {index === 0 || editingTags === note.id ? (
                   // Show all tags for first note or when editing
                   <>
