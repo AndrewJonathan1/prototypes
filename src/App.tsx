@@ -31,6 +31,12 @@ function App() {
     highlightedIndex: number
   } | null>(null)
   const [showHelp, setShowHelp] = useState<boolean>(false)
+  const [hashtagAutocomplete, setHashtagAutocomplete] = useState<{
+    noteId: string
+    query: string
+    savedCursorPos: number
+    highlightedIndex: number
+  } | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -39,7 +45,8 @@ function App() {
   const modKey = isMac ? '⌘' : 'Ctrl'
   const modKeyName = isMac ? 'Cmd' : 'Ctrl'
 
-  // UX: Check if current note has content - prevents creating empty notes
+  // UX: Prevent empty note creation to avoid clutter in the notes list
+  // Users should add content or tags before creating new notes to maintain meaningful organization
   const currentNote = notes.find(note => note.id === activeNoteId)
   const canCreateNewNote = currentNote && (currentNote.content.trim() || currentNote.tagIds.length > 0)
 
@@ -118,6 +125,79 @@ function App() {
       // Hide indicator after brief moment to show "saved" feedback
       setTimeout(() => setSaving(null), 300)
     }, 500)
+  }
+
+  // UX: Detect hashtag typing for inline tag autocomplete
+  const detectHashtagAtCursor = (content: string, cursorPos: number) => {
+    // Find hashtag at or before cursor position
+    let hashStart = -1
+    let hashEnd = cursorPos
+    
+    // Look backwards from cursor to find start of hashtag
+    for (let i = cursorPos - 1; i >= 0; i--) {
+      const char = content[i]
+      if (char === '#') {
+        hashStart = i
+        break
+      }
+      if (char === ' ' || char === '\n' || char === '\t') {
+        break // Hit whitespace before finding #
+      }
+    }
+    
+    // If we found a hashtag start, find the end
+    if (hashStart !== -1) {
+      for (let i = hashStart + 1; i < content.length; i++) {
+        const char = content[i]
+        if (char === ' ' || char === '\n' || char === '\t') {
+          hashEnd = i
+          break
+        }
+      }
+      
+      const hashtagText = content.slice(hashStart + 1, hashEnd) // Remove the #
+      return { start: hashStart, end: hashEnd, query: hashtagText }
+    }
+    
+    return null
+  }
+
+  // UX: Calculate pixel position of cursor in textarea for dropdown placement
+  const getCaretPixelPosition = (textarea: HTMLTextAreaElement, caretPos: number) => {
+    // Create a temporary div to measure text dimensions
+    const tempDiv = document.createElement('div')
+    const computedStyle = window.getComputedStyle(textarea)
+    
+    // Copy textarea styles to temp div
+    tempDiv.style.position = 'absolute'
+    tempDiv.style.visibility = 'hidden'
+    tempDiv.style.whiteSpace = 'pre-wrap'
+    tempDiv.style.wordWrap = 'break-word'
+    tempDiv.style.font = computedStyle.font
+    tempDiv.style.padding = computedStyle.padding
+    tempDiv.style.width = computedStyle.width
+    tempDiv.style.lineHeight = computedStyle.lineHeight
+    
+    document.body.appendChild(tempDiv)
+    
+    // Get text up to caret position
+    const textUpToCaret = textarea.value.substring(0, caretPos)
+    tempDiv.textContent = textUpToCaret
+    
+    // Add a span to measure the exact position
+    const caretSpan = document.createElement('span')
+    caretSpan.textContent = '|'
+    tempDiv.appendChild(caretSpan)
+    
+    const rect = textarea.getBoundingClientRect()
+    const spanRect = caretSpan.getBoundingClientRect()
+    
+    document.body.removeChild(tempDiv)
+    
+    return {
+      top: spanRect.top - rect.top + textarea.scrollTop,
+      left: spanRect.left - rect.left + textarea.scrollLeft
+    }
   }
 
   const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
@@ -357,6 +437,51 @@ function App() {
     })
   }
 
+  // UX: Handle hashtag autocomplete selection
+  const selectHashtagTag = (tagId: string, isNew = false) => {
+    if (!hashtagAutocomplete || !activeNoteRef.current) return
+    
+    let selectedTag = tags.find(t => t.id === tagId)
+    
+    // Create new tag if needed
+    if (isNew && !selectedTag) {
+      selectedTag = {
+        id: Date.now().toString(),
+        name: hashtagAutocomplete.query.trim()
+      }
+      setTags(prevTags => [...prevTags, selectedTag!])
+    }
+    
+    if (selectedTag) {
+      // Add tag to note
+      toggleTag(hashtagAutocomplete.noteId, selectedTag.id)
+      
+      // Restore cursor position in main textarea
+      setTimeout(() => {
+        if (activeNoteRef.current) {
+          activeNoteRef.current.setSelectionRange(hashtagAutocomplete.savedCursorPos, hashtagAutocomplete.savedCursorPos)
+          activeNoteRef.current.focus()
+        }
+      }, 0)
+    }
+    
+    setHashtagAutocomplete(null)
+  }
+
+  // UX: Cancel hashtag autocomplete and restore cursor
+  const cancelHashtagAutocomplete = () => {
+    if (!hashtagAutocomplete || !activeNoteRef.current) return
+    
+    setTimeout(() => {
+      if (activeNoteRef.current) {
+        activeNoteRef.current.setSelectionRange(hashtagAutocomplete.savedCursorPos, hashtagAutocomplete.savedCursorPos)
+        activeNoteRef.current.focus()
+      }
+    }, 0)
+    
+    setHashtagAutocomplete(null)
+  }
+
   const fuzzyMatch = (text: string, query: string): { matches: boolean; score: number } => {
     if (!query.trim()) return { matches: true, score: 0 }
     
@@ -528,20 +653,22 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
       <div className="max-w-3xl mx-auto p-4">
-        {/* Desktop header with New Note button */}
         <div className="hidden md:flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Notes</h1>
+          {/* UX: New note button shows conditional availability to prevent empty note clutter
+               Disabled state with helpful tooltip guides user behavior toward meaningful content creation */}
           <button
             onClick={canCreateNewNote ? createNewNote : undefined}
             disabled={!canCreateNewNote}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
               canCreateNewNote
-                ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'  // UX: Blue primary action when available
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'              // UX: Gray disabled state with not-allowed cursor
             }`}
-            title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}
+            title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}  // UX: Tooltip explains requirement
           >
             <span className="text-lg">+</span>
+            {/* UX: Keyboard shortcut badge shows platform-appropriate key, matches button state */}
             <kbd className={`px-1.5 py-0.5 rounded text-xs ${
               canCreateNewNote ? 'bg-blue-400' : 'bg-gray-400'
             }`}>{modKey}↵</kbd>
@@ -571,7 +698,7 @@ function App() {
                 }
               }}
             >
-              {/* Action buttons */}
+              {/* UX: Action buttons positioned for easy access without blocking content */}
               <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center gap-1 md:gap-2">
                 <button
                   onClick={(e) => {
@@ -616,7 +743,7 @@ function App() {
                   </svg>
                 </button>
               </div>
-              {/* Tags section */}
+              {/* UX: Tags section with right padding to avoid action button overlap */}
               <div className="flex flex-wrap gap-2 mb-3 pr-24 md:pr-32">
                 {inlineTagEdit?.noteId === note.id ? (
                   // UX: Inline tag editing mode - lightweight alternative to showing all tags
@@ -776,6 +903,23 @@ function App() {
                   autoResizeTextarea(e.target)
                 }}
                 onInput={(e) => autoResizeTextarea(e.target as HTMLTextAreaElement)}
+                onKeyDown={(e) => {
+                  // UX: Hashtag-style tagging feels natural like social media
+                  // Pressing # opens tag picker without showing # character in note content
+                  // Saves cursor position so user returns to exact typing location after tagging
+                  if (e.key === '#' && !hashtagAutocomplete) {
+                    e.preventDefault()
+                    const textarea = e.target as HTMLTextAreaElement
+                    const cursorPos = textarea.selectionStart
+                    
+                    setHashtagAutocomplete({
+                      noteId: note.id,
+                      query: '',
+                      savedCursorPos: cursorPos, // UX: Return to exact cursor position after tagging
+                      highlightedIndex: 0
+                    })
+                  }
+                }}
                 onFocus={() => {
                   // UX: Clear tag editing when user clicks into note content
                   // User intends to write, so exit tag mode and focus on writing
@@ -786,6 +930,104 @@ function App() {
                 placeholder="Start typing..."
               />
 
+              {/* UX: Hashtag autocomplete - positioned as narrow dropdown to avoid overwhelming the interface
+                   33% width keeps it compact while still usable, positioned below note for clear association */}
+              {hashtagAutocomplete && hashtagAutocomplete.noteId === note.id && (
+                <div 
+                  className="absolute bg-white border rounded-lg shadow-xl p-3 z-50 mt-2"
+                  style={{
+                    top: '100%',
+                    left: '0',
+                    width: '33%' // UX: Narrow width prevents interface overwhelm while staying functional
+                  }}
+                >
+                  {/* UX: Real text input allows natural typing including spaces, punctuation, multi-word tags
+                       Auto-focus immediately puts user in typing mode without extra clicks */}
+                  <input
+                    type="text"
+                    value={hashtagAutocomplete.query}
+                    onChange={(e) => setHashtagAutocomplete({
+                      ...hashtagAutocomplete,
+                      query: e.target.value,
+                      highlightedIndex: 0 // UX: Reset selection to top when search changes
+                    })}
+                    onKeyDown={(e) => {
+                      const filteredOptions = getFilteredTagOptions(hashtagAutocomplete.query)
+                      
+                      if (e.key === 'Escape') {
+                        e.preventDefault()
+                        cancelHashtagAutocomplete() // UX: Escape returns to note without disrupting workflow
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (filteredOptions.length > 0) {
+                          const selectedOption = filteredOptions[hashtagAutocomplete.highlightedIndex]
+                          selectHashtagTag(selectedOption.id, selectedOption.isNew)
+                        }
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault()
+                        // UX: Keyboard navigation prevents mouse dependency for power users
+                        setHashtagAutocomplete({
+                          ...hashtagAutocomplete,
+                          highlightedIndex: Math.max(0, hashtagAutocomplete.highlightedIndex - 1)
+                        })
+                      } else if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setHashtagAutocomplete({
+                          ...hashtagAutocomplete,
+                          highlightedIndex: Math.min(filteredOptions.length - 1, hashtagAutocomplete.highlightedIndex + 1)
+                        })
+                      }
+                    }}
+                    placeholder="Search tags..."
+                    className="w-full px-3 py-2 border rounded-md outline-none focus:border-blue-400 text-sm mb-2"
+                    autoFocus // UX: Immediate focus eliminates extra click, maintains typing flow
+                  />
+                  
+                  {/* Tag options */}
+                  <div className="max-h-48 overflow-y-auto">
+                    {getFilteredTagOptions(hashtagAutocomplete.query).map((option, index) => {
+                      const isAlreadySelected = note.tagIds.includes(option.id)
+                      return (
+                        <button
+                          key={option.id}
+                          onClick={() => selectHashtagTag(option.id, option.isNew)}
+                          className={`w-full text-left px-3 py-2 rounded-md text-sm transition-all mb-1 flex items-center gap-2 ${
+                            // UX: Visual hierarchy separates keyboard focus from selection state
+                            // Inner color = selection state, border = keyboard position
+                            index === hashtagAutocomplete.highlightedIndex
+                              ? isAlreadySelected && !option.isNew
+                                ? 'bg-blue-600 text-white border-4 border-yellow-400'      // UX: Keep dark blue to show "already selected" + thick border for keyboard focus
+                                : option.isNew
+                                ? 'bg-green-100 text-green-700 border-4 border-yellow-400'  // UX: Green for "will create new" + keyboard focus
+                                : 'bg-blue-100 text-blue-700 border-4 border-yellow-400'   // UX: Light blue for "available to select" + keyboard focus
+                              : // UX: Normal states show only selection status without keyboard distraction
+                              option.isNew
+                              ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-transparent'  // UX: Light green hints at "createable"
+                              : isAlreadySelected
+                              ? 'bg-blue-600 text-white hover:bg-blue-700 border border-transparent'      // UX: Dark blue confirms "selected"
+                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-transparent'    // UX: Neutral gray for "available"
+                          }`}
+                        >
+                          {/* UX: Checkmark on left provides immediate visual confirmation of selection
+                               White color ensures visibility against dark blue selected background */}
+                          {isAlreadySelected && !option.isNew && (
+                            <span className="text-white">✓</span>
+                          )}
+                          <span className="flex-1">
+                            {/* UX: Clear language - "Create" prefix eliminates ambiguity about new vs existing tags */}
+                            {option.isNew ? `+ Create "${option.name}"` : option.name}
+                          </span>
+                        </button>
+                      )
+                    })}
+                    {getFilteredTagOptions(hashtagAutocomplete.query).length === 0 && hashtagAutocomplete.query && (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No matching tags
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Last updated - only show for existing notes with content */}
               {index > 0 && note.content && (
@@ -806,7 +1048,7 @@ function App() {
         )}
       </div>
       
-      {/* Mobile FAB for new note */}
+      {/* UX: Floating action button for new note creation */}
       <button
         onClick={canCreateNewNote ? createNewNote : undefined}
         disabled={!canCreateNewNote}
@@ -847,35 +1089,60 @@ function App() {
               <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}↵</kbd>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-gray-600">Keyboard-based tagging</span>
-              <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}I</kbd>
-            </div>
-            <div className="flex justify-between items-center">
               <span className="text-gray-600">Navigate between notes</span>
               <div className="flex gap-1">
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">{modKey}↑</kbd>
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">{modKey}↓</kbd>
               </div>
             </div>
+            
             <div className="border-t pt-2 mt-2">
-              <div className="text-gray-500 text-xs mb-1">In tag mode:</div>
+              <div className="text-gray-500 text-xs mb-1 font-medium">Tag Search Mode ({modKey}I):</div>
+              <div className="text-gray-500 text-xs mb-2 italic">Browse all tags, create new ones</div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Open tag search</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}I</kbd>
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Navigate options</span>
                 <div className="flex gap-1">
                   <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↑</kbd>
                   <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↓</kbd>
-                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Tab</kbd>
                 </div>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">Select tag</span>
+                <span className="text-gray-600">Select/toggle tag</span>
                 <div className="flex gap-1">
                   <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Space</kbd>
                   <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↵</kbd>
                 </div>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-600">Exit tag mode</span>
+                <span className="text-gray-600">Exit</span>
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Esc</kbd>
+              </div>
+            </div>
+            
+            <div className="border-t pt-2 mt-2">
+              <div className="text-gray-500 text-xs mb-1 font-medium">Hashtag Mode (#):</div>
+              <div className="text-gray-500 text-xs mb-2 italic">Quick inline tagging while writing</div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Start hashtag tagging</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">#</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Navigate options</span>
+                <div className="flex gap-1">
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↑</kbd>
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↓</kbd>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Select tag</span>
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↵</kbd>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Cancel</span>
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Esc</kbd>
               </div>
             </div>
@@ -883,12 +1150,13 @@ function App() {
         </div>
       )}
       
-      {/* Mobile bottom navigation */}
+      {/* UX: Bottom navigation tab bar with clear visual states */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden">
         <div className="flex">
           <button
             onClick={() => setActiveTab('notes')}
             className={`flex-1 py-4 text-center ${
+              // UX: Blue accent color + top border clearly shows active tab, gray for inactive
               activeTab === 'notes' 
                 ? 'text-blue-600 border-t-2 border-blue-600' 
                 : 'text-gray-600'

@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
-/* Note creation animations */
+/* UX: Note creation animations provide visual feedback that content is being added
+   - expandIn: Creates satisfying "growing" effect when new notes appear, preventing jarring layout jumps
+   - 400ms duration feels responsive but not rushed, allowing user to track the new content
+   - translateY(-20px) starting position suggests content "sliding down" from above
+   - Opacity fade-in (0 -> 0.5 -> 1) ensures smooth visual transition without flickering
+   - Padding animation prevents content from appearing "cramped" during expansion */
 @keyframes expandIn {
   0% {
     max-height: 0;
@@ -21,6 +26,9 @@
   }
 }
 
+/* UX: slideDown provides subtle entrance animation for UI elements
+   - Shorter 10px movement creates gentle "settling" effect without being distracting
+   - Used for modal/dropdown appearances to feel natural and polished */
 @keyframes slideDown {
   0% {
     transform: translateY(-10px);
@@ -30,6 +38,10 @@
   }
 }
 
+/* UX: Animation class implementations with performance considerations
+   - ease-out timing creates natural deceleration (fast start, slow finish)
+   - overflow: hidden prevents content spillover during height animation
+   - forwards fill-mode maintains final animation state */
 .animate-expandIn {
   animation: expandIn 400ms ease-out forwards;
   overflow: hidden;
