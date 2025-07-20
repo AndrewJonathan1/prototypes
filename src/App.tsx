@@ -225,23 +225,36 @@ function App() {
     
     if (highlightedOption) {
       if (highlightedOption.isNew) {
-        // Create new tag
-        const newTag: Tag = {
-          id: Date.now().toString(),
-          name: highlightedOption.name
-        }
-        setTags(prevTags => [...prevTags, newTag])
-        toggleTag(inlineTagEdit.noteId, newTag.id)
-        // Clear query after creating
-        setInlineTagEdit({
-          ...inlineTagEdit,
-          query: '',
-          highlightedIndex: 0
-        })
+        // For new tags, just confirm creation - don't actually create yet
+        // This could show a confirmation or just do nothing
+        return
       } else {
         // Toggle existing tag
         toggleTag(inlineTagEdit.noteId, highlightedOption.id)
       }
+    }
+  }
+
+  const confirmCreateTag = () => {
+    if (!inlineTagEdit) return
+    
+    const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
+    const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
+    
+    if (highlightedOption?.isNew) {
+      // Create new tag
+      const newTag: Tag = {
+        id: Date.now().toString(),
+        name: highlightedOption.name
+      }
+      setTags(prevTags => [...prevTags, newTag])
+      toggleTag(inlineTagEdit.noteId, newTag.id)
+      // Clear query after creating
+      setInlineTagEdit({
+        ...inlineTagEdit,
+        query: '',
+        highlightedIndex: 0
+      })
     }
   }
 
@@ -287,8 +300,14 @@ function App() {
           exitInlineTagEdit()
         } else if (e.key === 'Enter') {
           e.preventDefault()
-          if (getFilteredTagOptions(inlineTagEdit.query).length > 0) {
-            toggleHighlightedTag()
+          const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
+          if (filteredOptions.length > 0) {
+            const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
+            if (highlightedOption?.isNew) {
+              confirmCreateTag()
+            } else {
+              toggleHighlightedTag()
+            }
           } else {
             exitInlineTagEdit()
           }
@@ -427,7 +446,7 @@ function App() {
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      ↑↓ navigate • Space/Enter to toggle • Escape to finish
+                      ↑↓ navigate • Space to toggle • Enter to select/create • Escape to finish
                     </div>
                   </div>
                 ) : index === 0 || editingTags === note.id ? (
