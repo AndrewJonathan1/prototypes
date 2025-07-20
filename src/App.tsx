@@ -229,8 +229,9 @@ function App() {
         // This could show a confirmation or just do nothing
         return
       } else {
-        // Toggle existing tag
+        // Toggle existing tag and continue tagging session
         toggleTag(inlineTagEdit.noteId, highlightedOption.id)
+        continueTaggingSession()
       }
     }
   }
@@ -249,13 +250,24 @@ function App() {
       }
       setTags(prevTags => [...prevTags, newTag])
       toggleTag(inlineTagEdit.noteId, newTag.id)
-      // Clear query after creating
-      setInlineTagEdit({
-        ...inlineTagEdit,
-        query: '',
-        highlightedIndex: 0
-      })
+      continueTaggingSession()
     }
+  }
+
+  const continueTaggingSession = () => {
+    if (!inlineTagEdit) return
+    
+    // Clear query and find first unselected tag
+    const note = notes.find(n => n.id === inlineTagEdit.noteId)
+    if (!note) return
+    
+    const unselectedTags = tags.filter(tag => !note.tagIds.includes(tag.id))
+    
+    setInlineTagEdit({
+      ...inlineTagEdit,
+      query: '',
+      highlightedIndex: 0
+    })
   }
 
   const getFilteredTagOptions = (query: string) => {
