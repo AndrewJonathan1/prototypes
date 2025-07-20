@@ -24,11 +24,11 @@ function App() {
   const [creatingTagForNote, setCreatingTagForNote] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'notes' | 'tags'>('notes')
   const [saving, setSaving] = useState<string | null>(null)
-  const [hashtagPopup, setHashtagPopup] = useState<{
+  const [tagPicker, setTagPicker] = useState<{
     isOpen: boolean
     noteId: string
     query: string
-    startPos: number
+    selectedIndex: number
   } | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
 
@@ -176,81 +176,128 @@ function App() {
     }
   }
 
-  const handleHashtagInput = (noteId: string, content: string, selectionStart: number) => {
-    // Look for # followed by text
-    const beforeCursor = content.substring(0, selectionStart)
-    const hashMatch = beforeCursor.match(/#(\w*)$/)
-    
-    if (hashMatch) {
-      const startPos = selectionStart - hashMatch[0].length
-      const query = hashMatch[1]
-      setHashtagPopup({
-        isOpen: true,
-        noteId,
+  const openTagPicker = (noteId: string) => {
+    setTagPicker({
+      isOpen: true,
+      noteId,
+      query: '',
+      selectedIndex: 0
+    })
+  }
+
+  const closeTagPicker = () => {
+    setTagPicker(null)
+  }
+
+  const updateTagPickerQuery = (query: string) => {
+    if (tagPicker) {
+      setTagPicker({
+        ...tagPicker,
         query,
-        startPos
+        selectedIndex: 0 // Reset selection when query changes
       })
-    } else {
-      setHashtagPopup(null)
     }
   }
 
-  const selectHashtagTag = (tagId: string, tagName: string) => {
-    if (!hashtagPopup) return
+  const navigateTagPicker = (direction: 'up' | 'down') => {
+    if (!tagPicker) return
     
-    const note = notes.find(n => n.id === hashtagPopup.noteId)
-    if (!note) return
+    const maxIndex = Math.max(filteredTagOptions.length - 1, 0)
+    let newIndex = tagPicker.selectedIndex
     
-    // Remove the hashtag text and replace with nothing
-    const beforeHashtag = note.content.substring(0, hashtagPopup.startPos)
-    const afterHashtag = note.content.substring(hashtagPopup.startPos + hashtagPopup.query.length + 1) // +1 for the #
-    const newContent = beforeHashtag + afterHashtag
+    if (direction === 'up') {
+      newIndex = newIndex > 0 ? newIndex - 1 : maxIndex
+    } else {
+      newIndex = newIndex < maxIndex ? newIndex + 1 : 0
+    }
     
-    // Add tag to note and update content
-    setNotes(prevNotes =>
-      prevNotes.map(n =>
-        n.id === hashtagPopup.noteId
-          ? {
-              ...n,
-              content: newContent,
-              tagIds: n.tagIds.includes(tagId) ? n.tagIds : [...n.tagIds, tagId],
-              updatedAt: new Date()
-            }
-          : n
-      )
-    )
-    
-    setHashtagPopup(null)
+    setTagPicker({
+      ...tagPicker,
+      selectedIndex: newIndex
+    })
   }
 
-  const filteredTags = hashtagPopup 
-    ? tags.filter(tag => 
-        tag.name.toLowerCase().includes(hashtagPopup.query.toLowerCase())
-      )
+  const selectTagFromPicker = (tagId?: string, tagName?: string) => {
+    if (!tagPicker) return
+    
+    let selectedTag
+    if (tagId && tagName) {
+      selectedTag = { id: tagId, name: tagName }
+    } else {
+      selectedTag = filteredTagOptions[tagPicker.selectedIndex]
+      if (!selectedTag) return
+    }
+    
+    // Toggle tag on note
+    toggleTag(tagPicker.noteId, selectedTag.id)
+    closeTagPicker()
+  }
+
+  const filteredTagOptions = tagPicker 
+    ? [
+        // Existing tags
+        ...tags.filter(tag => 
+          tag.name.toLowerCase().includes(tagPicker.query.toLowerCase())
+        ).map(tag => ({ ...tag, isNew: false })),
+        // Option to create new tag if query doesn't match existing
+        ...(tagPicker.query.trim() && 
+           !tags.some(tag => tag.name.toLowerCase() === tagPicker.query.toLowerCase())
+          ? [{ id: 'new', name: tagPicker.query.trim(), isNew: true }]
+          : []
+        )
+      ]
     : []
 
-  // Keyboard shortcut for new note (Cmd+/ to avoid browser conflicts)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // New note shortcut
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault()
         createNewNote()
       }
       
-      // Handle hashtag popup keyboard navigation
-      if (hashtagPopup?.isOpen) {
+      // Tag picker shortcut (Cmd+I)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+        e.preventDefault()
+        if (activeNoteId && !tagPicker?.isOpen) {
+          openTagPicker(activeNoteId)
+        }
+      }
+      
+      // Handle tag picker keyboard navigation
+      if (tagPicker?.isOpen) {
         if (e.key === 'Escape') {
           e.preventDefault()
-          setHashtagPopup(null)
-        } else if (e.key === 'Enter' && filteredTags.length > 0) {
+          closeTagPicker()
+        } else if (e.key === 'Enter') {
           e.preventDefault()
-          selectHashtagTag(filteredTags[0].id, filteredTags[0].name)
+          const selectedOption = filteredTagOptions[tagPicker.selectedIndex]
+          if (selectedOption) {
+            if (selectedOption.isNew) {
+              // Create new tag
+              const newTag: Tag = {
+                id: Date.now().toString(),
+                name: selectedOption.name
+              }
+              setTags(prevTags => [...prevTags, newTag])
+              selectTagFromPicker(newTag.id, newTag.name)
+            } else {
+              selectTagFromPicker(selectedOption.id, selectedOption.name)
+            }
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          navigateTagPicker('up')
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          navigateTagPicker('down')
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [hashtagPopup, filteredTags])
+  }, [tagPicker, filteredTagOptions, activeNoteId])
 
   return (
     <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
@@ -437,50 +484,11 @@ function App() {
                 onChange={(e) => {
                   updateNote(note.id, e.target.value)
                   autoResizeTextarea(e.target)
-                  handleHashtagInput(note.id, e.target.value, e.target.selectionStart || 0)
                 }}
                 onInput={(e) => autoResizeTextarea(e.target as HTMLTextAreaElement)}
                 placeholder="Start typing..."
               />
 
-              {/* Hashtag autocomplete popup */}
-              {hashtagPopup?.isOpen && hashtagPopup.noteId === note.id && (
-                <div className="relative">
-                  <div className="absolute top-1 left-0 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto z-20 min-w-[200px]">
-                    {filteredTags.length > 0 ? (
-                      filteredTags.map(tag => (
-                        <button
-                          key={tag.id}
-                          onClick={() => selectHashtagTag(tag.id, tag.name)}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2"
-                        >
-                          <span className="text-blue-600">#</span>
-                          <span>{tag.name}</span>
-                        </button>
-                      ))
-                    ) : hashtagPopup.query.trim() ? (
-                      <button
-                        onClick={() => {
-                          const newTag: Tag = {
-                            id: Date.now().toString(),
-                            name: hashtagPopup.query.trim()
-                          }
-                          setTags(prevTags => [...prevTags, newTag])
-                          selectHashtagTag(newTag.id, newTag.name)
-                        }}
-                        className="w-full text-left px-3 py-2 hover:bg-green-50 flex items-center gap-2 text-green-600"
-                      >
-                        <span>+</span>
-                        <span>Create tag "{hashtagPopup.query}"</span>
-                      </button>
-                    ) : (
-                      <div className="px-3 py-2 text-gray-500 text-sm">
-                        Type to search or create tags
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
 
               {/* Last updated - only show for existing notes with content */}
               {index > 0 && note.content && (
@@ -541,6 +549,80 @@ function App() {
           </button>
         </div>
       </div>
+      
+      {/* Tag Picker Modal */}
+      {tagPicker?.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-96 max-h-96 flex flex-col">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Add Tags</h3>
+              <p className="text-sm text-gray-500 mt-1">Press ⌘I to open, ↑↓ to navigate, Enter to select</p>
+            </div>
+            
+            {/* Search Input */}
+            <div className="p-4 border-b border-gray-200">
+              <input
+                type="text"
+                value={tagPicker.query}
+                onChange={(e) => updateTagPickerQuery(e.target.value)}
+                placeholder="Search or create tags..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md outline-none focus:border-blue-400"
+                autoFocus
+              />
+            </div>
+            
+            {/* Tag List */}
+            <div className="flex-1 overflow-y-auto">
+              {filteredTagOptions.length > 0 ? (
+                filteredTagOptions.map((option, index) => (
+                  <button
+                    key={option.id}
+                    onClick={() => {
+                      if (option.isNew) {
+                        const newTag: Tag = {
+                          id: Date.now().toString(),
+                          name: option.name
+                        }
+                        setTags(prevTags => [...prevTags, newTag])
+                        selectTagFromPicker(newTag.id, newTag.name)
+                      } else {
+                        selectTagFromPicker(option.id, option.name)
+                      }
+                    }}
+                    className={`w-full text-left px-4 py-3 flex items-center gap-3 border-b border-gray-100 last:border-b-0 ${
+                      index === tagPicker.selectedIndex
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    {option.isNew ? (
+                      <>
+                        <span className="text-green-600 font-bold">+</span>
+                        <span className="text-green-600">Create "{option.name}"</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs">
+                          #
+                        </span>
+                        <span className="text-gray-800">{option.name}</span>
+                        {notes.find(n => n.id === tagPicker.noteId)?.tagIds.includes(option.id) && (
+                          <span className="ml-auto text-blue-600 text-sm">✓</span>
+                        )}
+                      </>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <div className="p-4 text-center text-gray-500">
+                  {tagPicker.query ? 'No tags found' : 'Start typing to search tags'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
