@@ -30,8 +30,14 @@ function App() {
     query: string
     highlightedIndex: number
   } | null>(null)
+  const [showHelp, setShowHelp] = useState<boolean>(false)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // UX: Platform detection for cross-platform keyboard shortcuts
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+  const modKey = isMac ? '⌘' : 'Ctrl'
+  const modKeyName = isMac ? 'Cmd' : 'Ctrl'
 
   // Initialize with an empty note and some sample tags
   useEffect(() => {
@@ -498,7 +504,7 @@ function App() {
             className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
           >
             <span className="text-lg">+</span>
-            <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">⌘↵</kbd>
+            <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">{modKey}↵</kbd>
           </button>
         </div>
         
@@ -697,6 +703,7 @@ function App() {
                         setEditingTags(note.id)
                       }}
                       className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      title={`Edit Tags (or press ${modKey}I)`}
                     >
                       Edit Tags
                     </button>
@@ -709,10 +716,10 @@ function App() {
                 <span>{note.createdAt.toLocaleDateString()}</span>
                 {saving === note.id && (
                   <span className="text-xs text-green-600 flex items-center gap-1">
-                    <svg className="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    Saving...
+                    Saved
                   </span>
                 )}
               </div>
@@ -763,10 +770,66 @@ function App() {
       <button
         onClick={createNewNote}
         className="md:hidden fixed bottom-20 right-4 w-14 h-14 bg-blue-500 text-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-blue-600 transition-colors z-10"
-        title="New Note (⌘↵)"
+        title={`New Note (${modKey}↵)`}
       >
         +
       </button>
+      
+      {/* Help button */}
+      <button
+        onClick={() => setShowHelp(!showHelp)}
+        className="fixed bottom-4 right-4 w-10 h-10 bg-gray-600 text-white rounded-full shadow-lg flex items-center justify-center text-sm hover:bg-gray-700 transition-colors z-20"
+        title="Keyboard Shortcuts"
+      >
+        ?
+      </button>
+      
+      {/* Keyboard shortcuts help panel */}
+      {showHelp && (
+        <div className="fixed bottom-16 right-4 bg-white rounded-lg shadow-xl border p-4 w-72 z-30">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-800">Keyboard Shortcuts</h3>
+            <button
+              onClick={() => setShowHelp(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Create new note</span>
+              <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}↵</kbd>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Keyboard-based tagging</span>
+              <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}I</kbd>
+            </div>
+            <div className="border-t pt-2 mt-2">
+              <div className="text-gray-500 text-xs mb-1">In tag mode:</div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Navigate options</span>
+                <div className="flex gap-1">
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↑</kbd>
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↓</kbd>
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Tab</kbd>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Select tag</span>
+                <div className="flex gap-1">
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Space</kbd>
+                  <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">↵</kbd>
+                </div>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-600">Exit tag mode</span>
+                <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Esc</kbd>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Mobile bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden">
