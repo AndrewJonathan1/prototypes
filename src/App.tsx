@@ -338,7 +338,11 @@ function App() {
           navigateInlineTagEdit('down')
         } else if (e.key === 'Tab') {
           e.preventDefault()
-          navigateInlineTagEdit('down') // Tab advances to next item
+          if (e.shiftKey) {
+            navigateInlineTagEdit('up') // Shift+Tab goes backwards
+          } else {
+            navigateInlineTagEdit('down') // Tab advances to next item
+          }
         }
       }
     }
@@ -465,7 +469,7 @@ function App() {
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Tab/↑↓ navigate • Space to toggle • Enter to select/create • Escape to finish
+                      Tab/Shift+Tab/↑↓ navigate • Space to toggle • Enter to select/create • Escape to finish
                     </div>
                   </div>
                 ) : index === 0 || editingTags === note.id ? (
