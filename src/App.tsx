@@ -45,11 +45,28 @@ function App() {
     setNotes([initialNote])
     setActiveNoteId(initialNote.id)
     
-    // Sample tags
+    // Business/Startup/Personal Development tags with emoji prefixes
     setTags([
-      { id: '1', name: 'work' },
-      { id: '2', name: 'personal' },
-      { id: '3', name: 'ideas' }
+      { id: '1', name: '💼 business' },
+      { id: '2', name: '🚀 startup' },
+      { id: '3', name: '💡 ideas' },
+      { id: '4', name: '📈 growth' },
+      { id: '5', name: '💰 funding' },
+      { id: '6', name: '🎯 goals' },
+      { id: '7', name: '📊 metrics' },
+      { id: '8', name: '🤝 networking' },
+      { id: '9', name: '👥 team' },
+      { id: '10', name: '🏆 wins' },
+      { id: '11', name: '📚 learning' },
+      { id: '12', name: '⚡ productivity' },
+      { id: '13', name: '🧘 mindfulness' },
+      { id: '14', name: '💪 habits' },
+      { id: '15', name: '🔥 motivation' },
+      { id: '16', name: '🎨 creativity' },
+      { id: '17', name: '🔧 tools' },
+      { id: '18', name: '📝 notes' },
+      { id: '19', name: '⏰ urgent' },
+      { id: '20', name: '🌟 inspiration' }
     ])
   }, [])
 
@@ -289,10 +306,43 @@ function App() {
     })
   }
 
+  const fuzzyMatch = (text: string, query: string): { matches: boolean; score: number } => {
+    if (!query.trim()) return { matches: true, score: 0 }
+    
+    const textLower = text.toLowerCase()
+    const queryLower = query.toLowerCase()
+    
+    // Exact match gets highest score
+    if (textLower.includes(queryLower)) {
+      const index = textLower.indexOf(queryLower)
+      return { matches: true, score: 1000 - index } // Earlier matches score higher
+    }
+    
+    // Fuzzy match: check if all query characters appear in order
+    let textIndex = 0
+    let queryIndex = 0
+    let matches = 0
+    
+    while (textIndex < textLower.length && queryIndex < queryLower.length) {
+      if (textLower[textIndex] === queryLower[queryIndex]) {
+        matches++
+        queryIndex++
+      }
+      textIndex++
+    }
+    
+    const isMatch = queryIndex === queryLower.length
+    const score = isMatch ? (matches / textLower.length) * 100 : 0
+    
+    return { matches: isMatch, score }
+  }
+
   const getFilteredTagOptions = (query: string) => {
-    const matchingTags = tags.filter(tag => 
-      tag.name.toLowerCase().includes(query.toLowerCase())
-    ).map(tag => ({ ...tag, isNew: false }))
+    // Get matching tags with fuzzy search and scoring
+    const matchingTags = tags
+      .map(tag => ({ ...tag, ...fuzzyMatch(tag.name, query), isNew: false }))
+      .filter(tag => tag.matches)
+      .sort((a, b) => b.score - a.score) // Sort by relevance score
     
     // Only show "create new" option if query doesn't match any existing tags AND has content
     const shouldShowCreateOption = query.trim() && 
@@ -301,7 +351,7 @@ function App() {
     
     const filtered = [
       ...matchingTags,
-      ...(shouldShowCreateOption ? [{ id: 'new', name: query.trim(), isNew: true }] : [])
+      ...(shouldShowCreateOption ? [{ id: 'new', name: query.trim(), isNew: true, matches: true, score: 0 }] : [])
     ]
     
     return filtered
