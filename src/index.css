@@ -50,3 +50,11 @@
 .animate-slideDown {
   animation: slideDown 300ms ease-out forwards;
 }
+
+/* UX: Fullscreen mode smooth transitions for entering/exiting focus mode
+   - Fade transition for opacity changes creates gentle appearance/disappearance
+   - Transform transition enables smooth scaling and positioning changes
+   - 300ms duration feels natural - not too jarring when Cmd+I opens in fullscreen */
+.fullscreen-tag-transition {
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out, max-height 300ms ease-in-out;
+}

@@ -37,8 +37,13 @@ function App() {
     savedCursorPos: number
     highlightedIndex: number
   } | null>(null)
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(false)
+  const [showFullScreenButtons, setShowFullScreenButtons] = useState<boolean>(false)
+  const [showFullScreenTags, setShowFullScreenTags] = useState<boolean>(false)
+  const [selectingTagId, setSelectingTagId] = useState<string | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fullScreenButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // UX: Platform detection for cross-platform keyboard shortcuts
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -251,12 +256,16 @@ function App() {
     setInlineTagEdit({
       noteId,
       query: '',
-      highlightedIndex: 0 // UX: Start with first option highlighted for keyboard navigation
+      highlightedIndex: -1 // UX: Start with no selection until user navigates or types
     })
   }
 
   const exitInlineTagEdit = () => {
     setInlineTagEdit(null)
+    // UX: In fullscreen mode, hide tags when exiting tag editing
+    if (isFullScreen) {
+      setShowFullScreenTags(false)
+    }
     // UX: Return focus to note content after tag editing for seamless writing flow
     // User expects to continue typing in the note after finishing tag selection
     setTimeout(() => {
@@ -329,26 +338,6 @@ function App() {
     }
   }
 
-  const confirmCreateTag = () => {
-    if (!inlineTagEdit) return
-    
-    const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
-    const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
-    
-    if (highlightedOption?.isNew) {
-      // UX: Create new tag and immediately apply it to current note
-      const newTag: Tag = {
-        id: Date.now().toString(),
-        name: highlightedOption.name
-      }
-      setTags(prevTags => [...prevTags, newTag])
-      toggleTag(inlineTagEdit.noteId, newTag.id)
-      
-      // UX: Always auto-advance after creating new tag since user explicitly created something
-      // This keeps the flow moving for users who want to add multiple tags
-      continueTaggingSession()
-    }
-  }
 
   const continueTaggingSession = () => {
     if (!inlineTagEdit) return
@@ -498,10 +487,15 @@ function App() {
       
       // UX: Cmd+I opens inline tag editing for lightweight tag selection
       // Alternative to clicking "Edit Tags" - provides fuzzy search and keyboard navigation
+      // In fullscreen mode, also shows tags section with smoother transition
       if ((e.metaKey || e.ctrlKey) && e.key === 'i' && !isTagInputFocused) {
         e.preventDefault()
         if (activeNoteId && !inlineTagEdit) {
           startInlineTagEdit(activeNoteId)
+          // UX: In fullscreen mode, show tags with smooth transition
+          if (isFullScreen) {
+            setShowFullScreenTags(true)
+          }
         }
       }
       
@@ -555,10 +549,51 @@ function App() {
           setTags(prevTags => [...prevTags, newTag])
         }
       }
+      
+      // UX: Cmd+Shift+F toggles fullscreen focus mode for distraction-free writing
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'f' && !isTagInputFocused) {
+        e.preventDefault()
+        setIsFullScreen(prev => !prev)
+        // UX: Reset fullscreen UI state when toggling
+        setShowFullScreenButtons(false)
+        setShowFullScreenTags(false)
+        // Clear any existing timeout
+        if (fullScreenButtonTimeoutRef.current) {
+          clearTimeout(fullScreenButtonTimeoutRef.current)
+        }
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [inlineTagEdit, activeNoteId, editingTags, notes])
+  }, [inlineTagEdit, activeNoteId, editingTags, notes, isFullScreen])
+
+  // UX: Mouse movement detection for fullscreen mode - show buttons on movement, hide after idle
+  useEffect(() => {
+    if (!isFullScreen) return
+
+    const handleMouseMove = () => {
+      setShowFullScreenButtons(true)
+      
+      // Clear existing timeout
+      if (fullScreenButtonTimeoutRef.current) {
+        clearTimeout(fullScreenButtonTimeoutRef.current)
+      }
+      
+      // Hide buttons after 2 seconds of no movement
+      fullScreenButtonTimeoutRef.current = setTimeout(() => {
+        setShowFullScreenButtons(false)
+      }, 2000)
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      if (fullScreenButtonTimeoutRef.current) {
+        clearTimeout(fullScreenButtonTimeoutRef.current)
+      }
+    }
+  }, [isFullScreen])
 
   // UX: Dedicated keyboard handler for tag search input with specialized navigation
   const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
@@ -571,18 +606,36 @@ function App() {
       e.preventDefault()
       exitInlineTagEdit()
     } else if (e.key === 'Enter') {
-      // UX: Enter selects highlighted tag or creates new tag
+      // UX: Enter selects highlighted tag with visual feedback
       e.preventDefault()
       const filteredOptions = getFilteredTagOptions(inlineTagEdit.query)
-      if (filteredOptions.length > 0) {
+      if (filteredOptions.length > 0 && inlineTagEdit.highlightedIndex >= 0) {
         const highlightedOption = filteredOptions[inlineTagEdit.highlightedIndex]
-        if (highlightedOption?.isNew) {
-          confirmCreateTag() // UX: Create new tag when "Create" option is highlighted
-        } else {
-          toggleHighlightedTag() // UX: Toggle existing tag selection
-        }
+        
+        // UX: Show visual feedback first
+        setSelectingTagId(highlightedOption.id)
+        
+        // UX: Brief delay for visual feedback, then perform selection
+        setTimeout(() => {
+          if (highlightedOption?.isNew) {
+            // Create new tag
+            const newTag: Tag = {
+              id: Date.now().toString(),
+              name: highlightedOption.name
+            }
+            setTags(prevTags => [...prevTags, newTag])
+            toggleTag(inlineTagEdit.noteId, newTag.id)
+          } else {
+            // Toggle existing tag
+            toggleTag(inlineTagEdit.noteId, highlightedOption.id)
+          }
+          
+          // Reset selecting state and exit tag mode
+          setSelectingTagId(null)
+          continueTaggingSession()
+        }, 250) // 250ms visual feedback delay
       } else {
-        exitInlineTagEdit() // UX: Exit if no options available
+        exitInlineTagEdit() // UX: Exit if no options available or nothing selected
       }
     } else if (e.key === ' ') {
       // UX: Space bar also selects tags for quick keyboard-only interaction
@@ -608,49 +661,69 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-16 md:pb-0">
-      <div className="max-w-3xl mx-auto p-4">
-        <div className="hidden md:flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Notes</h1>
-          {/* UX: New note button shows conditional availability to prevent empty note clutter
-               Disabled state with helpful tooltip guides user behavior toward meaningful content creation */}
-          <button
-            onClick={canCreateNewNote ? createNewNote : undefined}
-            disabled={!canCreateNewNote}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-              canCreateNewNote
-                ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'  // UX: Blue primary action when available
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'              // UX: Gray disabled state with not-allowed cursor
-            }`}
-            title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}  // UX: Tooltip explains requirement
-          >
-            <span className="text-lg">+</span>
-          </button>
-        </div>
+    <div className={`min-h-screen transition-all duration-500 ease-in-out ${
+      isFullScreen 
+        ? 'bg-white fixed inset-0 z-50' 
+        : 'bg-gray-50 pb-16 md:pb-0'
+    }`}>
+      <div className={`transition-all duration-500 ease-in-out ${
+        isFullScreen 
+          ? 'h-full p-8 max-w-4xl mx-auto' 
+          : 'max-w-3xl mx-auto p-4'
+      }`}>
+        {!isFullScreen && (
+          <div className="hidden md:flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold text-gray-800">Notes</h1>
+            {/* UX: New note button shows conditional availability to prevent empty note clutter
+                 Disabled state with helpful tooltip guides user behavior toward meaningful content creation */}
+            <button
+              onClick={canCreateNewNote ? createNewNote : undefined}
+              disabled={!canCreateNewNote}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                canCreateNewNote
+                  ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'  // UX: Blue primary action when available
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'              // UX: Gray disabled state with not-allowed cursor
+              }`}
+              title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}  // UX: Tooltip explains requirement
+            >
+              <span className="text-lg">+</span>
+            </button>
+          </div>
+        )}
         
         {activeTab === 'notes' && (
-          <div className="space-y-4">
+          <div className={`${isFullScreen ? 'h-full' : 'space-y-4'}`}>
           {notes.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm border-2 border-gray-200 p-8 text-center">
-              <h2 className="text-2xl font-semibold text-gray-700 mb-4">Welcome to Notes!</h2>
-              <p className="text-gray-500 mb-6">Start capturing your thoughts instantly.</p>
-              <button
-                onClick={createNewNote}
-                className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 mx-auto"
-                title={`Create your first note (${modKey}↵)`}
-              >
-                <span className="text-lg">+</span>
-                Create your first note
-              </button>
-            </div>
+            !isFullScreen && (
+              <div className="bg-white rounded-lg shadow-sm border-2 border-gray-200 p-8 text-center">
+                <h2 className="text-2xl font-semibold text-gray-700 mb-4">Welcome to Notes!</h2>
+                <p className="text-gray-500 mb-6">Start capturing your thoughts instantly.</p>
+                <button
+                  onClick={createNewNote}
+                  className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 mx-auto"
+                  title={`Create your first note (${modKey}↵)`}
+                >
+                  <span className="text-lg">+</span>
+                  Create your first note
+                </button>
+              </div>
+            )
           ) : (
-            notes.map((note, index) => (
+            // UX: In fullscreen mode, only show the active note; otherwise show all notes
+            (isFullScreen 
+              ? notes.filter(note => note.id === activeNoteId)
+              : notes
+            ).map((note, index) => (
             <div 
               key={note.id}
-              className={`bg-white rounded-lg shadow-sm border-2 p-4 relative transition-all duration-300 ease-out ${
-                note.id === activeNoteId ? 'border-blue-400' : 'border-gray-200'
-              } ${note.isBookmarked ? 'bg-yellow-50' : ''} ${
-                note.isNew ? 'animate-expandIn' : ''
+              className={`transition-all duration-300 ease-out relative ${
+                isFullScreen 
+                  ? 'bg-transparent border-none p-0 h-full flex flex-col'
+                  : `bg-white rounded-lg shadow-sm border-2 p-4 ${
+                      note.id === activeNoteId ? 'border-blue-400' : 'border-gray-200'
+                    } ${note.isBookmarked ? 'bg-yellow-50' : ''} ${
+                      note.isNew ? 'animate-expandIn' : ''
+                    }`
               }`}
               onClick={() => {
                 setActiveNoteId(note.id)
@@ -666,7 +739,13 @@ function App() {
               }}
             >
               {/* UX: Action buttons positioned for easy access without blocking content */}
-              <div className="absolute top-2 right-2 md:top-4 md:right-4 flex items-center gap-1 md:gap-2">
+              {/* UX: In fullscreen mode, only show buttons on mouse movement for distraction-free writing */}
+              {(!isFullScreen || showFullScreenButtons) && (
+                <div className={`flex items-center gap-1 md:gap-2 transition-opacity duration-300 ${
+                  isFullScreen 
+                    ? 'absolute top-4 right-4 opacity-80 hover:opacity-100'
+                    : 'absolute top-2 right-2 md:top-4 md:right-4'
+                }`}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -710,8 +789,13 @@ function App() {
                   </svg>
                 </button>
               </div>
+              )}
               {/* UX: Tags section with right padding to avoid action button overlap */}
-              <div className="flex flex-wrap gap-2 mb-3 pr-24 md:pr-32">
+              {/* UX: In fullscreen mode, hide tags unless explicitly shown */}
+              {(!isFullScreen || showFullScreenTags) && (
+                <div className={`flex flex-wrap gap-2 mb-3 fullscreen-tag-transition ${
+                  isFullScreen ? 'pr-44' : 'pr-24 md:pr-32'
+                }`}>
                 {inlineTagEdit?.noteId === note.id ? (
                   // UX: Inline tag editing mode - lightweight alternative to showing all tags
                   // Provides fuzzy search and keyboard navigation for efficient tag selection
@@ -755,7 +839,9 @@ function App() {
                             })
                           }}
                           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer hover:scale-105 ${
-                            index === inlineTagEdit.highlightedIndex
+                            selectingTagId === option.id
+                              ? 'bg-blue-600 text-white ring-4 ring-blue-200 scale-105' // UX: Bright feedback when selecting
+                              : index === inlineTagEdit.highlightedIndex
                               ? option.isNew
                                 ? 'bg-green-100 text-green-700 ring-2 ring-green-400'
                                 : note.tagIds.includes(option.id)
@@ -867,24 +953,53 @@ function App() {
                   </>
                 )}
               </div>
+              )}
 
-              {/* Date created with save indicator */}
-              <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-                <span>{note.createdAt.toLocaleDateString()}</span>
-                {saving === note.id && (
-                  <span className="text-xs text-green-600 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              {/* UX: Fullscreen tag button - shows when in fullscreen mode to access tags */}
+              {isFullScreen && !showFullScreenTags && (
+                <div className={`mb-3 transition-opacity duration-300 ${
+                  showFullScreenButtons ? 'opacity-100' : 'opacity-40'
+                }`}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      // UX: Just toggle tag visibility, don't enter search mode
+                      setShowFullScreenTags(prev => !prev)
+                    }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                    title={`Tags (${modKey}I)`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                     </svg>
-                    Saved
-                  </span>
-                )}
-              </div>
+                    Tags
+                  </button>
+                </div>
+              )}
+
+              {/* Date created with save indicator - hidden in fullscreen mode */}
+              {!isFullScreen && (
+                <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                  <span>{note.createdAt.toLocaleDateString()}</span>
+                  {saving === note.id && (
+                    <span className="text-xs text-green-600 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Saved
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Note content */}
               <textarea
                 ref={note.id === activeNoteId ? activeNoteRef : null}
-                className={`w-full min-h-[1.5rem] resize-none outline-none overflow-hidden ${
+                className={`w-full resize-none outline-none overflow-hidden transition-all duration-300 ${
+                  isFullScreen 
+                    ? 'flex-1 text-lg leading-relaxed p-4 bg-transparent border-none min-h-0' 
+                    : 'min-h-[1.5rem]'
+                } ${
                   note.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'
                 }`}
                 value={note.content}
@@ -924,12 +1039,16 @@ function App() {
                    33% width keeps it compact while still usable, positioned below note for clear association */}
               {hashtagAutocomplete && hashtagAutocomplete.noteId === note.id && (
                 <div 
-                  className="absolute bg-white border rounded-lg shadow-xl p-3 z-50 mt-2"
-                  style={{
+                  className={`bg-white border rounded-lg shadow-xl p-3 z-50 mt-2 ${
+                    isFullScreen 
+                      ? 'fixed bottom-8 left-1/2 transform -translate-x-1/2 w-80'
+                      : 'absolute'
+                  }`}
+                  style={!isFullScreen ? {
                     top: '100%',
                     left: '0',
-                    width: '33%' // UX: Narrow width prevents interface overwhelm while staying functional
-                  }}
+                    width: '33%'
+                  } : undefined}
                 >
                   {/* UX: Real text input allows natural typing including spaces, punctuation, multi-word tags
                        Auto-focus immediately puts user in typing mode without extra clicks */}
@@ -1019,8 +1138,8 @@ function App() {
                 </div>
               )}
 
-              {/* Last updated - only show for existing notes with content */}
-              {index > 0 && note.content && (
+              {/* Last updated - only show for existing notes with content, hidden in fullscreen */}
+              {!isFullScreen && index > 0 && note.content && (
                 <div className="text-xs text-gray-400 mt-2">
                   Updated {formatDate(note.updatedAt)}
                 </div>
@@ -1038,31 +1157,35 @@ function App() {
         )}
       </div>
       
-      {/* UX: Floating action button for new note creation */}
-      <button
-        onClick={canCreateNewNote ? createNewNote : undefined}
-        disabled={!canCreateNewNote}
-        className={`md:hidden fixed bottom-20 right-4 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl transition-colors z-10 ${
-          canCreateNewNote
-            ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'
-            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-        }`}
-        title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}
-      >
-        +
-      </button>
+      {/* UX: Floating action button for new note creation - hidden in fullscreen */}
+      {!isFullScreen && (
+        <button
+          onClick={canCreateNewNote ? createNewNote : undefined}
+          disabled={!canCreateNewNote}
+          className={`md:hidden fixed bottom-20 right-4 w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl transition-colors z-10 ${
+            canCreateNewNote
+              ? 'bg-blue-500 text-white hover:bg-blue-600 cursor-pointer'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
+          title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}
+        >
+          +
+        </button>
+      )}
       
-      {/* Help button */}
-      <button
-        onClick={() => setShowHelp(!showHelp)}
-        className="fixed bottom-4 right-4 w-10 h-10 bg-gray-600 text-white rounded-full shadow-lg flex items-center justify-center text-sm hover:bg-gray-700 transition-colors z-20"
-        title="Keyboard Shortcuts"
-      >
-        ?
-      </button>
+      {/* Help button - hidden in fullscreen */}
+      {!isFullScreen && (
+        <button
+          onClick={() => setShowHelp(!showHelp)}
+          className="fixed bottom-4 right-4 w-10 h-10 bg-gray-600 text-white rounded-full shadow-lg flex items-center justify-center text-sm hover:bg-gray-700 transition-colors z-20"
+          title="Keyboard Shortcuts"
+        >
+          ?
+        </button>
+      )}
       
-      {/* Keyboard shortcuts help panel */}
-      {showHelp && (
+      {/* Keyboard shortcuts help panel - hidden in fullscreen */}
+      {!isFullScreen && showHelp && (
         <div className="fixed bottom-16 right-4 bg-white rounded-lg shadow-xl border p-4 w-72 z-30">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-800">Keyboard Shortcuts</h3>
@@ -1088,6 +1211,10 @@ function App() {
             <div className="flex justify-between items-center">
               <span className="text-gray-600">Create new tag</span>
               <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}+Alt+N</kbd>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Toggle fullscreen mode</span>
+              <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}+Shift+F</kbd>
             </div>
             
             <div className="border-t pt-2 mt-2">
@@ -1144,8 +1271,9 @@ function App() {
         </div>
       )}
       
-      {/* UX: Bottom navigation tab bar with clear visual states */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden">
+      {/* UX: Bottom navigation tab bar with clear visual states - hidden in fullscreen */}
+      {!isFullScreen && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 md:hidden">
         <div className="flex">
           <button
             onClick={() => setActiveTab('notes')}
@@ -1176,6 +1304,7 @@ function App() {
           </button>
         </div>
       </div>
+      )}
     </div>
   )
 }
