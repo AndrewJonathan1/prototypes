@@ -693,12 +693,12 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-500 ease-in-out ${
+    <div className={`min-h-screen ${
       isFullScreen 
         ? 'bg-white fixed inset-0 z-50' 
         : 'bg-gray-50 pb-16 md:pb-0'
     }`}>
-      <div className={`transition-[padding,max-width] duration-500 ease-in-out ${
+      <div className={`${
         isFullScreen 
           ? 'h-full p-8 max-w-4xl mx-auto' 
           : 'h-auto max-w-3xl mx-auto p-4'
@@ -748,7 +748,7 @@ function App() {
             ).map((note, index) => (
             <div 
               key={note.id}
-              className={`transition-[background-color,border-color,padding] duration-300 ease-out relative ${
+              className={`relative ${
                 isFullScreen 
                   ? 'bg-transparent border-none p-0 h-full flex flex-col'
                   : `bg-white rounded-lg shadow-sm border-2 p-4 h-auto block ${
@@ -1064,7 +1064,7 @@ function App() {
               {/* Note content */}
               <textarea
                 ref={note.id === activeNoteId ? activeNoteRef : null}
-                className={`w-full resize-none outline-none overflow-hidden transition-[font-size,line-height,padding,background-color,border] duration-300 ${
+                className={`w-full resize-none outline-none overflow-hidden ${
                   isFullScreen 
                     ? 'flex-1 text-lg leading-relaxed p-4 bg-transparent border-none min-h-0' 
                     : 'flex-none min-h-[1.5rem] h-auto'
