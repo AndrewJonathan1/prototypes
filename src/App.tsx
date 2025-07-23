@@ -44,6 +44,7 @@ function App() {
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fullScreenButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const fullScreenTagTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // UX: Platform detection for cross-platform keyboard shortcuts
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
@@ -462,6 +463,13 @@ function App() {
       // UX: Prevent global shortcuts when user is typing in tag search to avoid conflicts
       const isTagInputFocused = document.activeElement?.classList.contains('tag-search-input')
       
+      // UX: Escape to hide tags in fullscreen mode
+      if (e.key === 'Escape' && isFullScreen && showFullScreenTags && !inlineTagEdit) {
+        e.preventDefault()
+        setShowFullScreenTags(false)
+        return
+      }
+      
       // UX: Escape to exit "Edit Tags" mode on existing notes (but not first note)
       // First note always shows all tags, so escape shouldn't hide them
       if (e.key === 'Escape' && !isTagInputFocused && !inlineTagEdit && editingTags) {
@@ -594,6 +602,50 @@ function App() {
       }
     }
   }, [isFullScreen])
+
+  // UX: Auto-hide tags in fullscreen mode after 6 seconds of mouse inactivity
+  useEffect(() => {
+    if (!isFullScreen || !showFullScreenTags) return
+
+    const startTagHideTimer = () => {
+      // Clear existing timeout
+      if (fullScreenTagTimeoutRef.current) {
+        clearTimeout(fullScreenTagTimeoutRef.current)
+      }
+      
+      // Hide tags after 6 seconds of no interaction
+      fullScreenTagTimeoutRef.current = setTimeout(() => {
+        setShowFullScreenTags(false)
+      }, 6000)
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const target = e.target as Element
+      // Only reset timer if mouse is not over tags area
+      if (!target.closest('[data-tags-area]')) {
+        startTagHideTimer()
+      }
+    }
+
+    const handleMouseLeave = () => {
+      startTagHideTimer()
+    }
+
+    // Start timer initially
+    startTagHideTimer()
+
+    // Listen for mouse movements and mouse leave events
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseleave', handleMouseLeave)
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseleave', handleMouseLeave)
+      if (fullScreenTagTimeoutRef.current) {
+        clearTimeout(fullScreenTagTimeoutRef.current)
+      }
+    }
+  }, [isFullScreen, showFullScreenTags])
 
   // UX: Dedicated keyboard handler for tag search input with specialized navigation
   const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
@@ -788,14 +840,33 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                   </svg>
                 </button>
+                {/* UX: Tags button in fullscreen mode - aligned with other action buttons */}
+                {isFullScreen && !showFullScreenTags && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      // UX: Just toggle tag visibility, don't enter search mode
+                      setShowFullScreenTags(prev => !prev)
+                    }}
+                    className="p-1.5 md:p-2 rounded hover:bg-gray-100 text-gray-400"
+                    title={`Tags (${modKey}I)`}
+                  >
+                    <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                  </button>
+                )}
               </div>
               )}
               {/* UX: Tags section with right padding to avoid action button overlap */}
               {/* UX: In fullscreen mode, hide tags unless explicitly shown */}
               {(!isFullScreen || showFullScreenTags) && (
-                <div className={`flex flex-wrap gap-2 mb-3 fullscreen-tag-transition ${
-                  isFullScreen ? 'pr-44' : 'pr-24 md:pr-32'
-                }`}>
+                <div 
+                  data-tags-area
+                  className={`flex flex-wrap gap-2 mb-3 fullscreen-tag-transition ${
+                    isFullScreen ? 'pr-44' : 'pr-24 md:pr-32'
+                  }`}
+                >
                 {inlineTagEdit?.noteId === note.id ? (
                   // UX: Inline tag editing mode - lightweight alternative to showing all tags
                   // Provides fuzzy search and keyboard navigation for efficient tag selection
@@ -955,27 +1026,6 @@ function App() {
               </div>
               )}
 
-              {/* UX: Fullscreen tag button - shows when in fullscreen mode to access tags */}
-              {isFullScreen && !showFullScreenTags && (
-                <div className={`mb-3 transition-opacity duration-300 ${
-                  showFullScreenButtons ? 'opacity-100' : 'opacity-40'
-                }`}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      // UX: Just toggle tag visibility, don't enter search mode
-                      setShowFullScreenTags(prev => !prev)
-                    }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                    title={`Tags (${modKey}I)`}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                    </svg>
-                    Tags
-                  </button>
-                </div>
-              )}
 
               {/* Date created with save indicator - hidden in fullscreen mode */}
               {!isFullScreen && (
