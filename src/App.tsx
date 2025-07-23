@@ -143,6 +143,11 @@ function App() {
 
 
   const autoResizeTextarea = (textarea: HTMLTextAreaElement) => {
+    // UX: Don't auto-resize in fullscreen mode - let flex-1 handle it
+    if (isFullScreen && textarea.closest('.h-full')) {
+      textarea.style.height = ''
+      return
+    }
     textarea.style.height = 'auto'
     textarea.style.height = `${textarea.scrollHeight}px`
   }
@@ -584,6 +589,14 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [inlineTagEdit, activeNoteId, editingTags, notes, isFullScreen])
 
+  // UX: Resize textareas when switching fullscreen modes to clear inline heights
+  useEffect(() => {
+    setTimeout(() => {
+      const textareas = document.querySelectorAll('textarea')
+      textareas.forEach(textarea => autoResizeTextarea(textarea as HTMLTextAreaElement))
+    }, 100) // Small delay to ensure DOM has updated
+  }, [isFullScreen])
+
   // UX: Mouse movement detection for fullscreen mode - show buttons on movement, hide after idle
   useEffect(() => {
     if (!isFullScreen) return
@@ -745,19 +758,24 @@ function App() {
                     }`
               }`}
               onClick={() => {
+                const isNewNote = note.id !== activeNoteId
                 setActiveNoteId(note.id)
-                // UX: Close edit tags mode when clicking a different note to avoid confusion
-                if (editingTags && editingTags !== note.id) {
-                  setEditingTags(null)
+                
+                // Only do these actions when actually switching to a different note
+                if (isNewNote) {
+                  // UX: Close edit tags mode when clicking a different note to avoid confusion
+                  if (editingTags && editingTags !== note.id) {
+                    setEditingTags(null)
+                  }
+                  // UX: Clear inline tag editing when switching notes for clean state
+                  // User should focus on the new note, not continue editing tags on old note
+                  if (inlineTagEdit && inlineTagEdit.noteId !== note.id) {
+                    setInlineTagEdit(null)
+                  }
+                  // UX: Reset tag visibility when switching notes  
+                  setShowFullScreenTags(true)
+                  setShowRegularTags(true)
                 }
-                // UX: Clear inline tag editing when switching notes for clean state
-                // User should focus on the new note, not continue editing tags on old note
-                if (inlineTagEdit && inlineTagEdit.noteId !== note.id) {
-                  setInlineTagEdit(null)
-                }
-                // UX: Reset tag visibility when switching notes  
-                setShowFullScreenTags(true)
-                setShowRegularTags(true)
               }}
             >
               {/* UX: Fullscreen toggle button in bottom-right - universal expectation from video/media apps */}
