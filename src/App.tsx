@@ -102,6 +102,13 @@ function App() {
     textareas.forEach(textarea => autoResizeTextarea(textarea as HTMLTextAreaElement))
   }, [notes])
 
+  // UX: Auto-show help panel when no notes exist to guide new users
+  useEffect(() => {
+    if (notes.length === 0) {
+      setShowHelp(true)
+    }
+  }, [notes.length])
+
   const updateNote = (noteId: string, content: string) => {
     // UX: Update note content immediately without showing save indicator on every keystroke
     setNotes(prevNotes => 
@@ -521,8 +528,31 @@ function App() {
             if (activeNoteRef.current) {
               activeNoteRef.current.focus()
               activeNoteRef.current.setSelectionRange(0, 0)
+              
+              // UX: Scroll note into view with margin to ensure full visibility
+              const noteElement = activeNoteRef.current.closest('.bg-white')
+              if (noteElement) {
+                noteElement.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'nearest',
+                  inline: 'nearest'
+                })
+              }
             }
           }, 0)
+        }
+      }
+      
+      // UX: Ctrl+Alt+N creates new tag - global shortcut for quick tag creation
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'n' && !isTagInputFocused) {
+        e.preventDefault()
+        const tagName = prompt('Enter new tag name:')
+        if (tagName && tagName.trim()) {
+          const newTag: Tag = {
+            id: Date.now().toString(),
+            name: tagName.trim()
+          }
+          setTags(prevTags => [...prevTags, newTag])
         }
       }
     }
@@ -604,7 +634,21 @@ function App() {
         
         {activeTab === 'notes' && (
           <div className="space-y-4">
-          {notes.map((note, index) => (
+          {notes.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border-2 border-gray-200 p-8 text-center">
+              <h2 className="text-2xl font-semibold text-gray-700 mb-4">Welcome to Notes!</h2>
+              <p className="text-gray-500 mb-6">Start capturing your thoughts instantly.</p>
+              <button
+                onClick={createNewNote}
+                className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 mx-auto"
+              >
+                <span className="text-lg">+</span>
+                Create your first note
+                <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">{modKey}↵</kbd>
+              </button>
+            </div>
+          ) : (
+            notes.map((note, index) => (
             <div 
               key={note.id}
               className={`bg-white rounded-lg shadow-sm border-2 p-4 relative transition-all duration-300 ease-out ${
@@ -854,7 +898,7 @@ function App() {
                     setInlineTagEdit(null)
                   }
                 }}
-                placeholder="Start typing..."
+                placeholder={`Start writing... (${modKey}+I for tags, # for inline tags)`}
               />
 
               {/* UX: Hashtag autocomplete - positioned as narrow dropdown to avoid overwhelming the interface
@@ -963,7 +1007,7 @@ function App() {
                 </div>
               )}
             </div>
-          ))}
+          )))}
           </div>
         )}
         
@@ -1021,6 +1065,10 @@ function App() {
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">{modKey}↑</kbd>
                 <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">{modKey}↓</kbd>
               </div>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Create new tag</span>
+              <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">{modKey}+Alt+N</kbd>
             </div>
             
             <div className="border-t pt-2 mt-2">
