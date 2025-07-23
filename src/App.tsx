@@ -39,7 +39,8 @@ function App() {
   } | null>(null)
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false)
   const [showFullScreenButtons, setShowFullScreenButtons] = useState<boolean>(false)
-  const [showFullScreenTags, setShowFullScreenTags] = useState<boolean>(false)
+  const [showFullScreenTags, setShowFullScreenTags] = useState<boolean>(true)
+  const [showRegularTags, setShowRegularTags] = useState<boolean>(true)
   const [selectingTagId, setSelectingTagId] = useState<string | null>(null)
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -49,6 +50,7 @@ function App() {
   // UX: Platform detection for cross-platform keyboard shortcuts
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
   const modKey = isMac ? '⌘' : 'Ctrl'
+
 
   // UX: Prevent empty note creation to avoid clutter in the notes list
   // Users should add content or tags before creating new notes to maintain meaningful organization
@@ -463,15 +465,10 @@ function App() {
       // UX: Prevent global shortcuts when user is typing in tag search to avoid conflicts
       const isTagInputFocused = document.activeElement?.classList.contains('tag-search-input')
       
-      // UX: Escape to hide tags in fullscreen mode
-      if (e.key === 'Escape' && isFullScreen && showFullScreenTags && !inlineTagEdit) {
-        e.preventDefault()
-        setShowFullScreenTags(false)
-        return
-      }
-      
-      // UX: Escape to exit "Edit Tags" mode on existing notes (but not first note)
-      // First note always shows all tags, so escape shouldn't hide them
+      // UX: Escape hierarchy - most specific to least specific:
+      // 1. Hashtag autocomplete (handled in hashtag input onKeyDown)
+      // 2. Inline tag edit (Cmd+I mode) - handled in handleTagInputKeyDown
+      // 3. Regular tag editing mode 
       if (e.key === 'Escape' && !isTagInputFocused && !inlineTagEdit && editingTags) {
         const editingNote = notes.find(note => note.id === editingTags)
         const editingNoteIndex = notes.findIndex(note => note.id === editingTags)
@@ -480,6 +477,16 @@ function App() {
           e.preventDefault()
           setEditingTags(null)
         }
+      }
+      
+      
+      // UX: 5. Fullscreen mode with no tags showing - exit fullscreen
+      if (e.key === 'Escape' && isFullScreen && !showFullScreenTags && !inlineTagEdit && !editingTags) {
+        e.preventDefault()
+        setIsFullScreen(false)
+        setShowFullScreenButtons(false)
+        setShowFullScreenTags(false)
+        return
       }
       
       // UX: Cmd+Enter creates new note (save and create new pattern)
@@ -564,7 +571,9 @@ function App() {
         setIsFullScreen(prev => !prev)
         // UX: Reset fullscreen UI state when toggling
         setShowFullScreenButtons(false)
-        setShowFullScreenTags(false)
+        // UX: Smart tag visibility - hide if note has tags (clean writing), show if no tags (discoverability)
+        const currentNote = notes.find(note => note.id === activeNoteId)
+        setShowFullScreenTags(!currentNote || currentNote.tagIds.length === 0)
         // Clear any existing timeout
         if (fullScreenButtonTimeoutRef.current) {
           clearTimeout(fullScreenButtonTimeoutRef.current)
@@ -603,49 +612,7 @@ function App() {
     }
   }, [isFullScreen])
 
-  // UX: Auto-hide tags in fullscreen mode after 6 seconds of mouse inactivity
-  useEffect(() => {
-    if (!isFullScreen || !showFullScreenTags) return
 
-    const startTagHideTimer = () => {
-      // Clear existing timeout
-      if (fullScreenTagTimeoutRef.current) {
-        clearTimeout(fullScreenTagTimeoutRef.current)
-      }
-      
-      // Hide tags after 6 seconds of no interaction
-      fullScreenTagTimeoutRef.current = setTimeout(() => {
-        setShowFullScreenTags(false)
-      }, 6000)
-    }
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const target = e.target as Element
-      // Only reset timer if mouse is not over tags area
-      if (!target.closest('[data-tags-area]')) {
-        startTagHideTimer()
-      }
-    }
-
-    const handleMouseLeave = () => {
-      startTagHideTimer()
-    }
-
-    // Start timer initially
-    startTagHideTimer()
-
-    // Listen for mouse movements and mouse leave events
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseleave', handleMouseLeave)
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseleave', handleMouseLeave)
-      if (fullScreenTagTimeoutRef.current) {
-        clearTimeout(fullScreenTagTimeoutRef.current)
-      }
-    }
-  }, [isFullScreen, showFullScreenTags])
 
   // UX: Dedicated keyboard handler for tag search input with specialized navigation
   const handleTagInputKeyDown = (e: React.KeyboardEvent) => {
@@ -713,15 +680,15 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen transition-all duration-500 ease-in-out ${
+    <div className={`min-h-screen transition-colors duration-500 ease-in-out ${
       isFullScreen 
         ? 'bg-white fixed inset-0 z-50' 
         : 'bg-gray-50 pb-16 md:pb-0'
     }`}>
-      <div className={`transition-all duration-500 ease-in-out ${
+      <div className={`transition-[padding,max-width] duration-500 ease-in-out ${
         isFullScreen 
           ? 'h-full p-8 max-w-4xl mx-auto' 
-          : 'max-w-3xl mx-auto p-4'
+          : 'h-auto max-w-3xl mx-auto p-4'
       }`}>
         {!isFullScreen && (
           <div className="hidden md:flex justify-between items-center mb-6">
@@ -744,7 +711,7 @@ function App() {
         )}
         
         {activeTab === 'notes' && (
-          <div className={`${isFullScreen ? 'h-full' : 'space-y-4'}`}>
+          <div className={`${isFullScreen ? 'h-full' : 'h-auto space-y-4'}`}>
           {notes.length === 0 ? (
             !isFullScreen && (
               <div className="bg-white rounded-lg shadow-sm border-2 border-gray-200 p-8 text-center">
@@ -768,10 +735,10 @@ function App() {
             ).map((note, index) => (
             <div 
               key={note.id}
-              className={`transition-all duration-300 ease-out relative ${
+              className={`transition-[background-color,border-color,padding] duration-300 ease-out relative ${
                 isFullScreen 
                   ? 'bg-transparent border-none p-0 h-full flex flex-col'
-                  : `bg-white rounded-lg shadow-sm border-2 p-4 ${
+                  : `bg-white rounded-lg shadow-sm border-2 p-4 h-auto block ${
                       note.id === activeNoteId ? 'border-blue-400' : 'border-gray-200'
                     } ${note.isBookmarked ? 'bg-yellow-50' : ''} ${
                       note.isNew ? 'animate-expandIn' : ''
@@ -788,16 +755,37 @@ function App() {
                 if (inlineTagEdit && inlineTagEdit.noteId !== note.id) {
                   setInlineTagEdit(null)
                 }
+                // UX: Reset tag visibility when switching notes  
+                setShowFullScreenTags(true)
+                setShowRegularTags(true)
               }}
             >
+              {/* UX: Fullscreen toggle button in bottom-right - universal expectation from video/media apps */}
+              {!isFullScreen && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsFullScreen(true)
+                    setActiveNoteId(note.id)
+                  }}
+                  className="absolute bottom-2 right-2 md:bottom-4 md:right-4 p-1.5 rounded hover:bg-gray-100 text-gray-400 opacity-60 hover:opacity-100 transition-opacity"
+                  title={`Fullscreen (${modKey}+Shift+F)`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                </button>
+              )}
+              
               {/* UX: Action buttons positioned for easy access without blocking content */}
               {/* UX: In fullscreen mode, only show buttons on mouse movement for distraction-free writing */}
-              {(!isFullScreen || showFullScreenButtons) && (
-                <div className={`flex items-center gap-1 md:gap-2 transition-opacity duration-300 ${
-                  isFullScreen 
-                    ? 'absolute top-4 right-4 opacity-80 hover:opacity-100'
-                    : 'absolute top-2 right-2 md:top-4 md:right-4'
-                }`}>
+              <div className={`flex items-center gap-1 md:gap-2 transition-opacity duration-300 ${
+                isFullScreen 
+                  ? `absolute top-4 right-4 hover:opacity-100 ${
+                      showFullScreenButtons ? 'opacity-80' : 'opacity-0'
+                    }`
+                  : 'absolute top-2 right-2 md:top-4 md:right-4'
+              }`}>
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -840,27 +828,40 @@ function App() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                   </svg>
                 </button>
-                {/* UX: Tags button in fullscreen mode - aligned with other action buttons */}
-                {isFullScreen && !showFullScreenTags && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      // UX: Just toggle tag visibility, don't enter search mode
-                      setShowFullScreenTags(prev => !prev)
-                    }}
-                    className="p-1.5 md:p-2 rounded hover:bg-gray-100 text-gray-400"
-                    title={`Tags (${modKey}I)`}
-                  >
-                    <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                    </svg>
-                  </button>
-                )}
               </div>
-              )}
-              {/* UX: Tags section with right padding to avoid action button overlap */}
-              {/* UX: In fullscreen mode, hide tags unless explicitly shown */}
-              {(!isFullScreen || showFullScreenTags) && (
+              
+              {/* UX: Simple disclosure triangle toggle */}
+              <div className={`mb-3 transition-opacity duration-300 ${
+                isFullScreen 
+                  ? `mt-4 ${showFullScreenButtons ? 'opacity-80' : 'opacity-0'}`
+                  : 'mt-0'
+              }`}>
+                <button
+                  data-tags-button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (isFullScreen) {
+                      setShowFullScreenTags(prev => !prev)
+                    } else {
+                      setShowRegularTags(prev => !prev)
+                    }
+                  }}
+                  className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+                  title={`Tags (${modKey}I)`}
+                >
+                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d={
+                      (isFullScreen ? showFullScreenTags : showRegularTags)
+                        ? "M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" // down triangle (expanded)
+                        : "M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" // right triangle (collapsed)
+                    } clipRule="evenodd" />
+                  </svg>
+                  Tags
+                </button>
+              </div>
+              
+              {/* UX: Tags section - unified toggle behavior for both modes */}
+              {(isFullScreen ? showFullScreenTags : showRegularTags) && (
                 <div 
                   data-tags-area
                   className={`flex flex-wrap gap-2 mb-3 fullscreen-tag-transition ${
@@ -1045,10 +1046,10 @@ function App() {
               {/* Note content */}
               <textarea
                 ref={note.id === activeNoteId ? activeNoteRef : null}
-                className={`w-full resize-none outline-none overflow-hidden transition-all duration-300 ${
+                className={`w-full resize-none outline-none overflow-hidden transition-[font-size,line-height,padding,background-color,border] duration-300 ${
                   isFullScreen 
                     ? 'flex-1 text-lg leading-relaxed p-4 bg-transparent border-none min-h-0' 
-                    : 'min-h-[1.5rem]'
+                    : 'flex-none min-h-[1.5rem] h-auto'
                 } ${
                   note.isCompleted ? 'line-through text-gray-400' : 'text-gray-800'
                 }`}
