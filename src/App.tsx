@@ -45,7 +45,6 @@ function App() {
   const activeNoteRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fullScreenButtonTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const fullScreenTagTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // UX: Platform detection for cross-platform keyboard shortcuts
   const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
