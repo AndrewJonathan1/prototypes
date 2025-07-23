@@ -729,9 +729,32 @@ function App() {
                     {/* Show filtered tags */}
                     <div className="flex flex-wrap gap-2 mt-2">
                       {getFilteredTagOptions(inlineTagEdit.query).map((option, index) => (
-                        <div
+                        <button
                           key={option.id}
-                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (option.isNew) {
+                              // Create new tag
+                              const newTag: Tag = {
+                                id: Date.now().toString(),
+                                name: option.name
+                              }
+                              setTags(prevTags => [...prevTags, newTag])
+                              toggleTag(inlineTagEdit.noteId, newTag.id)
+                              continueTaggingSession()
+                            } else {
+                              // Toggle existing tag
+                              toggleTag(inlineTagEdit.noteId, option.id)
+                              continueTaggingSession()
+                            }
+                          }}
+                          onMouseEnter={() => {
+                            setInlineTagEdit({
+                              ...inlineTagEdit,
+                              highlightedIndex: index
+                            })
+                          }}
+                          className={`px-3 py-1 rounded-full text-sm font-medium transition-colors cursor-pointer hover:scale-105 ${
                             index === inlineTagEdit.highlightedIndex
                               ? option.isNew
                                 ? 'bg-green-100 text-green-700 ring-2 ring-green-400'
@@ -739,14 +762,14 @@ function App() {
                                 ? 'bg-blue-500 text-white ring-2 ring-blue-300'
                                 : 'bg-gray-200 text-gray-700 ring-2 ring-blue-400'
                               : option.isNew
-                              ? 'bg-green-100 text-green-700'
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
                               : note.tagIds.includes(option.id)
-                              ? 'bg-blue-500 text-white'
-                              : 'bg-gray-200 text-gray-700'
+                              ? 'bg-blue-500 text-white hover:bg-blue-600'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
                         >
                           {option.isNew ? `+ Create "${option.name}"` : option.name}
-                        </div>
+                        </button>
                       ))}
                       {getFilteredTagOptions(inlineTagEdit.query).length === 0 && inlineTagEdit.query && (
                         <div className="px-3 py-1 text-sm text-gray-500">
