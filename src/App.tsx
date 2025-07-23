@@ -625,10 +625,6 @@ function App() {
             title={canCreateNewNote ? `New Note (${modKey}↵)` : 'Add content or tags to create new note'}  // UX: Tooltip explains requirement
           >
             <span className="text-lg">+</span>
-            {/* UX: Keyboard shortcut badge shows platform-appropriate key, matches button state */}
-            <kbd className={`px-1.5 py-0.5 rounded text-xs ${
-              canCreateNewNote ? 'bg-blue-400' : 'bg-gray-400'
-            }`}>{modKey}↵</kbd>
           </button>
         </div>
         
@@ -641,10 +637,10 @@ function App() {
               <button
                 onClick={createNewNote}
                 className="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 mx-auto"
+                title={`Create your first note (${modKey}↵)`}
               >
                 <span className="text-lg">+</span>
                 Create your first note
-                <kbd className="px-1.5 py-0.5 bg-blue-400 rounded text-xs">{modKey}↵</kbd>
               </button>
             </div>
           ) : (
